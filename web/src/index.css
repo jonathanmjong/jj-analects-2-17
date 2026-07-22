@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+
+  --color-background: #faf9f5;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f3f1ea;
+  --color-foreground: #1f1e1d;
+  --color-muted-foreground: #6b6862;
+  --color-border: #e7e4db;
+  --color-accent: #d97757;
+  --color-accent-foreground: #fffaf6;
+  --color-positive: #3d7a5c;
+  --color-negative: #bf4c44;
+
+  --radius-card: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-background: #171614;
+    --color-surface: #1f1e1c;
+    --color-surface-muted: #26241f;
+    --color-foreground: #f2f0e9;
+    --color-muted-foreground: #a39d90;
+    --color-border: #34322c;
+    --color-accent: #e08b6a;
+    --color-accent-foreground: #171614;
+    --color-positive: #6bbf95;
+    --color-negative: #e08079;
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-background: #171614;
+  --color-surface: #1f1e1c;
+  --color-surface-muted: #26241f;
+  --color-foreground: #f2f0e9;
+  --color-muted-foreground: #a39d90;
+  --color-border: #34322c;
+  --color-accent: #e08b6a;
+  --color-accent-foreground: #171614;
+  --color-positive: #6bbf95;
+  --color-negative: #e08079;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+}

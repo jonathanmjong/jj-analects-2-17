@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    // "subscribed" custom claim is set by the stripeWebhook Cloud Function
+    // whenever a user's subscription status is trialing or active — this is
+    // the sole gate on all financial-data reads.
+    function isSubscribed() {
+      return isSignedIn() && request.auth.token.subscribed == true;
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /companies/{ticker} {
+      allow read: if isSubscribed();
+      allow write: if false;
+
+      match /{subcollection}/{docId} {
+        allow read: if isSubscribed();
+        allow write: if false;
+      }
+    }
+
+    match /rankings/{docId} {
+      allow read: if isSubscribed();
+      allow write: if false;
+
+      match /companies/{ticker} {
+        allow read: if isSubscribed();
+        allow write: if false;
+      }
+    }
+
+    match /historicalRankings/{ticker} {
+      allow read: if isSubscribed();
+      allow write: if false;
+
+      match /snapshots/{date} {
+        allow read: if isSubscribed();
+        allow write: if false;
+      }
+    }
+
+    match /metricDefinitions/{docId} {
+      allow read: if isSubscribed();
+      allow write: if false;
+    }
+
+    match /dataRefreshLogs/{docId} {
+      allow read: if isSubscribed();
+      allow write: if false;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid);
+      // Clients may only ever touch their own watchlist/profile fields —
+      // subscriptionStatus, stripeCustomerId etc. are written exclusively by
+      // the Admin SDK inside stripeWebhook.
+      allow update: if isOwner(uid) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['watchlist', 'displayName', 'photoURL', 'updatedAt']);
+      allow delete: if false;
+    }
+  }
+}
