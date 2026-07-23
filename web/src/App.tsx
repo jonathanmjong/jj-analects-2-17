@@ -17,6 +17,7 @@ const SectorsOverviewPage = lazy(() =>
 const SectorDetailPage = lazy(() =>
   import("./pages/SectorDetailPage").then((m) => ({ default: m.SectorDetailPage })),
 );
+const WatchlistPage = lazy(() => import("./pages/WatchlistPage").then((m) => ({ default: m.WatchlistPage })));
 
 function PageFallback() {
   return (
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="/compare" element={<ComparePage />} />
             <Route path="/sectors" element={<SectorsOverviewPage />} />
             <Route path="/sectors/:sector" element={<SectorDetailPage />} />
+            <Route path="/watchlist" element={<WatchlistPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

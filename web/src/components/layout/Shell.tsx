@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { BarChart3, GitCompare, Home as HomeIcon, LogOut, Menu, PieChart, User as UserIcon, X } from "lucide-react";
+import { BarChart3, GitCompare, Home as HomeIcon, LogOut, Menu, PieChart, Star, User as UserIcon, X } from "lucide-react";
 import { useAuth } from "../../context/AuthProvider";
 import { cn } from "../../lib/utils";
 
@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { to: "/rankings", label: "Rankings", icon: BarChart3 },
   { to: "/sectors", label: "Sectors", icon: PieChart },
   { to: "/compare", label: "Compare", icon: GitCompare },
+  { to: "/watchlist", label: "Watchlist", icon: Star },
 ];
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {

@@ -5,6 +5,7 @@ import { useCustomRankings } from "../hooks/useCustomRankings";
 import { Card, CardContent } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { ScorePill } from "../components/ui/ScorePill";
+import { WatchlistButton } from "../components/ui/WatchlistButton";
 import { Slider } from "../components/ui/Slider";
 import { formatCurrency } from "../lib/utils";
 
@@ -76,6 +77,7 @@ export function HomePage() {
         <table className="w-full text-sm">
           <thead className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
             <tr>
+              <th className="w-8 border-b border-border px-3 py-2 font-medium" />
               <th className="border-b border-border px-3 py-2 font-medium">Rank</th>
               <th className="border-b border-border px-3 py-2 font-medium">Company</th>
               <th className="border-b border-border px-3 py-2 font-medium">Sector</th>
@@ -87,14 +89,14 @@ export function HomePage() {
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                   Loading…
                 </td>
               </tr>
             )}
             {!isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                   No ranked companies yet — run the seed/bootstrap job to populate data.
                 </td>
               </tr>
@@ -105,6 +107,9 @@ export function HomePage() {
                 onClick={() => navigate(`/company/${row.ticker}`)}
                 className="cursor-pointer border-b border-border last:border-b-0 hover:bg-surface-hover"
               >
+                <td className="px-3 py-2">
+                  <WatchlistButton ticker={row.ticker} />
+                </td>
                 <td className="px-3 py-2 text-muted-foreground">{row.overallRank ?? "—"}</td>
                 <td className="px-3 py-2">
                   <Link

@@ -20,6 +20,7 @@ import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { Slider } from "../components/ui/Slider";
 import { ScorePill } from "../components/ui/ScorePill";
+import { WatchlistButton } from "../components/ui/WatchlistButton";
 import { formatCurrency, formatMultiple, formatPercent } from "../lib/utils";
 import { exportRowsAsCsv, exportRowsAsJson, exportRowsAsXlsx } from "../lib/exporters";
 
@@ -45,6 +46,12 @@ const EMPTY_VALUE_FILTERS: ValueFilters = {
 const VALUATION_METRIC_COUNT = 10;
 
 const columns: ColumnDef<Company>[] = [
+  {
+    id: "watchlist",
+    header: "",
+    cell: ({ row }) => <WatchlistButton ticker={row.original.ticker} />,
+    enableSorting: false,
+  },
   {
     accessorKey: "latest.overallRank",
     header: "Rank",

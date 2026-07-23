@@ -8,6 +8,7 @@ import { useMetricDefinitions } from "../hooks/useMetricDefinitions";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { ScorePill } from "../components/ui/ScorePill";
+import { WatchlistButton } from "../components/ui/WatchlistButton";
 import { Slider } from "../components/ui/Slider";
 import { SpiderChart } from "../components/charts/SpiderChart";
 import { HistoryLineChart } from "../components/charts/HistoryLineChart";
@@ -98,6 +99,7 @@ export function CompanyPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-semibold tracking-tight">{company.ticker}</h1>
+            <WatchlistButton ticker={company.ticker} />
             {company.sector && <Badge variant="neutral">{company.sector}</Badge>}
             {company.isSp500 && <Badge variant="accent">S&P 500</Badge>}
           </div>
