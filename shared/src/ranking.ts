@@ -50,7 +50,7 @@ export const DEFAULT_RANKING_CONFIG: RankingWeightsConfig = {
 export interface DataRefreshLog {
   id: string;
   provider: string;
-  dataType: "prices" | "quarterly_statements" | "annual_statements" | "sp500_membership" | "rankings";
+  dataType: "prices" | "quarterly_statements" | "annual_statements" | "sp500_membership" | "rankings" | "universe_screening";
   status: "running" | "success" | "partial_failure" | "failure";
   tickersRequested: number;
   tickersSucceeded: number;

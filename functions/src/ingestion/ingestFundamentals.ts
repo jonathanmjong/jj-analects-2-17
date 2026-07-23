@@ -1,10 +1,16 @@
 import type { Company } from "@proverbs/shared";
 import { collections, FieldValue } from "../lib/firestore.js";
 import { log } from "../lib/logger.js";
-import { getProvider, PROFILE_PROVIDER, STATEMENT_PROVIDER } from "../providers/index.js";
+import { SecEdgarProvider } from "../providers/SecEdgarProvider.js";
 import { computeMetricsForCompany } from "../metrics/computeMetrics.js";
 
 const STATEMENT_YEARS = 5;
+
+// getCompanyBundle() is SEC-EDGAR-specific (not part of the swappable
+// FinancialDataProvider interface) — it exists specifically to fetch
+// statements + profile + approx market value in 2 HTTP calls instead of 5,
+// which matters at universe scale. See SecEdgarProvider's class doc comment.
+const secEdgar = new SecEdgarProvider();
 
 /**
  * Pulls company profile + up to 5 years of income/balance/cash-flow
@@ -15,15 +21,9 @@ const STATEMENT_YEARS = 5;
 export async function ingestFundamentalsForTicker(ticker: string): Promise<{ ok: boolean; error?: string }> {
   const symbol = ticker.toUpperCase();
   try {
-    const profileProvider = getProvider(PROFILE_PROVIDER);
-    const statementProvider = getProvider(STATEMENT_PROVIDER);
-
-    const [profile, income, balance, cashFlow] = await Promise.all([
-      profileProvider.getCompanyProfile(symbol).catch(() => null),
-      statementProvider.getIncomeStatements(symbol, STATEMENT_YEARS),
-      statementProvider.getBalanceSheets(symbol, STATEMENT_YEARS),
-      statementProvider.getCashFlowStatements(symbol, STATEMENT_YEARS),
-    ]);
+    const bundle = await secEdgar.getCompanyBundle(symbol, STATEMENT_YEARS);
+    if (!bundle) return { ok: false, error: "no SEC EDGAR data (unknown ticker or no filings)" };
+    const { profile, income, balance, cashFlow } = bundle;
 
     const now = new Date().toISOString();
     const companyRef = collections.company(symbol);
@@ -31,13 +31,13 @@ export async function ingestFundamentalsForTicker(ticker: string): Promise<{ ok:
 
     const companyDoc: Partial<Company> = {
       ticker: symbol,
-      companyName: profile?.companyName ?? existing.data()?.companyName ?? symbol,
-      cik: profile?.cik ?? existing.data()?.cik ?? null,
-      sector: (profile?.sector as Company["sector"]) ?? existing.data()?.sector ?? null,
-      industry: profile?.industry ?? existing.data()?.industry ?? null,
-      description: profile?.description ?? existing.data()?.description ?? null,
-      website: profile?.website ?? existing.data()?.website ?? null,
-      country: profile?.country ?? existing.data()?.country ?? null,
+      companyName: profile.companyName,
+      cik: profile.cik,
+      sector: profile.sector as Company["sector"],
+      industry: profile.industry,
+      description: profile.description,
+      website: profile.website,
+      country: profile.country,
       updatedAt: now,
     };
     if (!existing.exists) {
@@ -87,7 +87,7 @@ export async function ingestFundamentalsForUniverse(tickers: string[]): Promise<
 }
 
 export async function logRefresh(
-  dataType: "prices" | "quarterly_statements" | "annual_statements" | "sp500_membership" | "rankings",
+  dataType: "prices" | "quarterly_statements" | "annual_statements" | "sp500_membership" | "rankings" | "universe_screening",
   provider: string,
   result: { succeeded: string[]; failed: Array<{ ticker: string; error: string }> },
   startedAt: string,

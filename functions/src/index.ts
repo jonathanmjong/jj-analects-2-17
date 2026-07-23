@@ -6,6 +6,7 @@ export { dailyPriceRefresh } from "./scheduled/dailyPriceRefresh.js";
 export { quarterlyStatementRefresh } from "./scheduled/quarterlyStatementRefresh.js";
 export { annualStatementRefresh } from "./scheduled/annualStatementRefresh.js";
 export { sp500MembershipRefresh } from "./scheduled/sp500MembershipRefresh.js";
+export { expandUniverse } from "./scheduled/expandUniverse.js";
 export { recomputeRankingsDaily, recomputeRankingsWithConfig } from "./scheduled/recomputeRankings.js";
 
 export { bootstrapSeedUniverse, seedMetricDefinitions } from "./admin/adminOps.js";

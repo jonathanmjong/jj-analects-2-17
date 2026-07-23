@@ -18,6 +18,13 @@ interface CompanyFacts {
   };
 }
 
+interface SubmissionJson {
+  name?: string;
+  sic?: string;
+  sicDescription?: string;
+  addresses?: { business?: { stateOrCountry?: string } };
+}
+
 export interface ApproxMarketValue {
   /** Aggregate market value of common equity held by non-affiliates, as reported on the most recent 10-K cover page. */
   publicFloat: number;
@@ -26,11 +33,27 @@ export interface ApproxMarketValue {
   asOfDate: string;
 }
 
+export interface SecCompanyBundle {
+  ticker: string;
+  cik: string;
+  profile: CompanyProfileResult;
+  income: IncomeStatement[];
+  balance: BalanceSheet[];
+  cashFlow: CashFlowStatement[];
+  approxMarketValue: ApproxMarketValue | null;
+}
+
 /**
  * SEC EDGAR adapter — free, keyless, but rate-limited (SEC asks for <=10
  * req/sec and a descriptive User-Agent identifying the requester). Used as
  * the ground-truth fallback / cross-check source for XBRL financial
  * statement data since it comes directly from filed 10-Ks/10-Qs.
+ *
+ * getCompanyBundle() is the preferred entry point for bulk work (screening,
+ * ingestion): it fetches companyfacts + submissions exactly once per
+ * company and derives everything (statements, profile, approx market
+ * value) from those two responses, instead of the 5 independent fetches
+ * the per-capability methods below would otherwise cost.
  */
 export class SecEdgarProvider extends FinancialDataProvider {
   readonly name = "sec_edgar";
@@ -74,6 +97,14 @@ export class SecEdgarProvider extends FinancialDataProvider {
     return (await res.json()) as CompanyFacts;
   }
 
+  private async fetchSubmission(cik: string): Promise<SubmissionJson | null> {
+    const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
+      headers: { "User-Agent": this.userAgent },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as SubmissionJson;
+  }
+
   /** Latest annual (10-K) value per tag, most recent `periods` fiscal years, deduped by fiscal year. */
   private annualSeries(facts: CompanyFacts | null, tags: string[], periods: number): Map<number, number> {
     const out = new Map<number, number>();
@@ -95,67 +126,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
     return [...series.keys()].sort((a, b) => b - a).slice(0, periods);
   }
 
-  async getQuote() {
-    return null; // SEC EDGAR has no price data; pair with YahooFinanceProvider for quotes.
-  }
-
-  /**
-   * Fallback used when the live price source is unavailable. `dei:EntityPublicFloat`
-   * is required on every 10-K cover page — a real, official, keyless
-   * approximation of market cap, just not a live one (it's as of the
-   * filing's cover-page date, typically the end of the prior fiscal Q2).
-   */
-  async getApproxMarketValue(ticker: string): Promise<ApproxMarketValue | null> {
-    const cik = await this.cikFor(ticker);
-    if (!cik) return null;
-    const facts = await this.fetchCompanyFacts(cik);
-    const floatFacts = facts?.facts?.dei?.EntityPublicFloat?.units?.USD ?? [];
-    const latestFloat = floatFacts
-      .filter((f) => f.form === "10-K")
-      .sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
-    if (!latestFloat) return null;
-
-    const sharesFacts = facts?.facts?.dei?.EntityCommonStockSharesOutstanding?.units?.shares ?? [];
-    const latestShares = sharesFacts
-      .filter((f) => f.form === "10-K")
-      .sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
-
-    return {
-      publicFloat: latestFloat.val,
-      sharesOutstanding: latestShares?.val ?? null,
-      asOfDate: latestFloat.end,
-    };
-  }
-
-  async getCompanyProfile(ticker: string): Promise<CompanyProfileResult | null> {
-    const cik = await this.cikFor(ticker);
-    if (!cik) return null;
-    const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
-      headers: { "User-Agent": this.userAgent },
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as {
-      name?: string;
-      sic?: string;
-      sicDescription?: string;
-      addresses?: { business?: { stateOrCountry?: string } };
-    };
-    const sicCode = json.sic ? Number.parseInt(json.sic, 10) : null;
-    return {
-      ticker: ticker.toUpperCase(),
-      companyName: json.name ?? ticker.toUpperCase(),
-      cik,
-      sector: sectorFromSicCode(sicCode),
-      industry: json.sicDescription ?? null,
-      description: null,
-      website: null,
-      country: json.addresses?.business?.stateOrCountry ?? null,
-    };
-  }
-
-  async getIncomeStatements(ticker: string, periods: number): Promise<IncomeStatement[]> {
-    const cik = await this.cikFor(ticker);
-    const facts = cik ? await this.fetchCompanyFacts(cik) : null;
+  private extractIncomeStatements(facts: CompanyFacts | null, periods: number): IncomeStatement[] {
     const revenue = this.annualSeries(facts, ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"], periods);
     const grossProfit = this.annualSeries(facts, ["GrossProfit"], periods);
     const rnd = this.annualSeries(facts, ["ResearchAndDevelopmentExpense"], periods);
@@ -192,9 +163,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
     }));
   }
 
-  async getBalanceSheets(ticker: string, periods: number): Promise<BalanceSheet[]> {
-    const cik = await this.cikFor(ticker);
-    const facts = cik ? await this.fetchCompanyFacts(cik) : null;
+  private extractBalanceSheets(facts: CompanyFacts | null, periods: number): BalanceSheet[] {
     const cash = this.annualSeries(facts, ["CashAndCashEquivalentsAtCarryingValue"], periods);
     const receivables = this.annualSeries(facts, ["AccountsReceivableNetCurrent"], periods);
     const inventory = this.annualSeries(facts, ["InventoryNet"], periods);
@@ -242,9 +211,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
     });
   }
 
-  async getCashFlowStatements(ticker: string, periods: number): Promise<CashFlowStatement[]> {
-    const cik = await this.cikFor(ticker);
-    const facts = cik ? await this.fetchCompanyFacts(cik) : null;
+  private extractCashFlowStatements(facts: CompanyFacts | null, periods: number): CashFlowStatement[] {
     const ocf = this.annualSeries(facts, ["NetCashProvidedByUsedInOperatingActivities"], periods);
     const capex = this.annualSeries(facts, ["PaymentsToAcquirePropertyPlantAndEquipment"], periods);
     const dividends = this.annualSeries(facts, ["PaymentsOfDividends"], periods);
@@ -271,6 +238,94 @@ export class SecEdgarProvider extends FinancialDataProvider {
         netDebtIssuance: null,
       };
     });
+  }
+
+  private extractApproxMarketValue(facts: CompanyFacts | null): ApproxMarketValue | null {
+    const floatFacts = facts?.facts?.dei?.EntityPublicFloat?.units?.USD ?? [];
+    const latestFloat = floatFacts.filter((f) => f.form === "10-K").sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
+    if (!latestFloat) return null;
+
+    const sharesFacts = facts?.facts?.dei?.EntityCommonStockSharesOutstanding?.units?.shares ?? [];
+    const latestShares = sharesFacts.filter((f) => f.form === "10-K").sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
+
+    return {
+      publicFloat: latestFloat.val,
+      sharesOutstanding: latestShares?.val ?? null,
+      asOfDate: latestFloat.end,
+    };
+  }
+
+  private buildProfile(ticker: string, cik: string, submission: SubmissionJson | null): CompanyProfileResult {
+    const sicCode = submission?.sic ? Number.parseInt(submission.sic, 10) : null;
+    return {
+      ticker: ticker.toUpperCase(),
+      companyName: submission?.name ?? ticker.toUpperCase(),
+      cik,
+      sector: sectorFromSicCode(sicCode),
+      industry: submission?.sicDescription ?? null,
+      description: null,
+      website: null,
+      country: submission?.addresses?.business?.stateOrCountry ?? null,
+    };
+  }
+
+  async getQuote() {
+    return null; // SEC EDGAR has no price data; pair with YahooFinanceProvider for quotes.
+  }
+
+  /**
+   * Fallback used when the live price source is unavailable. `dei:EntityPublicFloat`
+   * is required on every 10-K cover page — a real, official, keyless
+   * approximation of market cap, just not a live one (it's as of the
+   * filing's cover-page date, typically the end of the prior fiscal Q2).
+   */
+  async getApproxMarketValue(ticker: string): Promise<ApproxMarketValue | null> {
+    const cik = await this.cikFor(ticker);
+    if (!cik) return null;
+    return this.extractApproxMarketValue(await this.fetchCompanyFacts(cik));
+  }
+
+  async getCompanyProfile(ticker: string): Promise<CompanyProfileResult | null> {
+    const cik = await this.cikFor(ticker);
+    if (!cik) return null;
+    return this.buildProfile(ticker, cik, await this.fetchSubmission(cik));
+  }
+
+  async getIncomeStatements(ticker: string, periods: number): Promise<IncomeStatement[]> {
+    const cik = await this.cikFor(ticker);
+    return this.extractIncomeStatements(cik ? await this.fetchCompanyFacts(cik) : null, periods);
+  }
+
+  async getBalanceSheets(ticker: string, periods: number): Promise<BalanceSheet[]> {
+    const cik = await this.cikFor(ticker);
+    return this.extractBalanceSheets(cik ? await this.fetchCompanyFacts(cik) : null, periods);
+  }
+
+  async getCashFlowStatements(ticker: string, periods: number): Promise<CashFlowStatement[]> {
+    const cik = await this.cikFor(ticker);
+    return this.extractCashFlowStatements(cik ? await this.fetchCompanyFacts(cik) : null, periods);
+  }
+
+  /**
+   * One companyfacts fetch + one submissions fetch (2 HTTP calls total,
+   * down from 5) covering statements, profile, and approx market value.
+   * Preferred entry point for bulk work — see class doc comment.
+   */
+  async getCompanyBundle(ticker: string, periods = 5): Promise<SecCompanyBundle | null> {
+    const cik = await this.cikFor(ticker);
+    if (!cik) return null;
+    const [facts, submission] = await Promise.all([this.fetchCompanyFacts(cik), this.fetchSubmission(cik)]);
+    if (!facts) return null;
+
+    return {
+      ticker: ticker.toUpperCase(),
+      cik,
+      profile: this.buildProfile(ticker, cik, submission),
+      income: this.extractIncomeStatements(facts, periods),
+      balance: this.extractBalanceSheets(facts, periods),
+      cashFlow: this.extractCashFlowStatements(facts, periods),
+      approxMarketValue: this.extractApproxMarketValue(facts),
+    };
   }
 
   async listUniverse(): Promise<string[]> {
