@@ -21,6 +21,8 @@ import { Button } from "../components/ui/Button";
 import { Slider } from "../components/ui/Slider";
 import { ScorePill } from "../components/ui/ScorePill";
 import { WatchlistButton } from "../components/ui/WatchlistButton";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { QualityGrowthScatter, type ScatterDatum } from "../components/charts/QualityGrowthScatter";
 import { formatCurrency, formatMultiple, formatPercent } from "../lib/utils";
 import { exportRowsAsCsv, exportRowsAsJson, exportRowsAsXlsx } from "../lib/exporters";
 
@@ -170,6 +172,27 @@ export function RankingsPage() {
 
   const tableColumns = useMemo(() => [...columns, buildValuationColumn(rankings)], [rankings]);
 
+  const scatterData = useMemo<ScatterDatum[]>(() => {
+    return filteredData
+      .filter(
+        (c): c is typeof c & { latest: { marketCap: number; headlineMetrics: { roic: number; revenueGrowth1y: number } } } =>
+          c.latest?.marketCap != null &&
+          c.latest?.headlineMetrics?.roic != null &&
+          c.latest?.headlineMetrics?.revenueGrowth1y != null &&
+          c.sector != null,
+      )
+      .sort((a, b) => b.latest.marketCap - a.latest.marketCap)
+      .slice(0, 200)
+      .map((c) => ({
+        ticker: c.ticker,
+        companyName: c.companyName,
+        sector: c.sector as string,
+        roic: c.latest.headlineMetrics.roic,
+        revenueGrowth1y: c.latest.headlineMetrics.revenueGrowth1y,
+        marketCap: c.latest.marketCap,
+      }));
+  }, [filteredData]);
+
   const table = useReactTable({
     data: filteredData,
     columns: tableColumns,
@@ -217,6 +240,21 @@ export function RankingsPage() {
         <h1 className="text-3xl font-semibold tracking-tight">Rankings</h1>
         <p className="text-muted-foreground">Sort, filter, and export the full ranked universe.</p>
       </div>
+
+      {scatterData.length > 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Quality vs. Growth (ROIC × Revenue Growth, sized by market cap)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <QualityGrowthScatter data={scatterData} onSelect={(ticker) => navigate(`/company/${ticker}`)} />
+            <p className="mt-2 text-xs text-muted-foreground">
+              Largest {scatterData.length} companies (by market cap) matching the current filters with both metrics
+              available. Colored by sector.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <Input

@@ -61,6 +61,7 @@ export interface HeadlineMetrics {
   dividendYield: number | null;
   roic: number | null;
   fcfYield: number | null;
+  revenueGrowth1y: number | null;
 }
 
 /** Firestore subcollection: companies/{ticker}/marketData/{YYYY-MM-DD} */

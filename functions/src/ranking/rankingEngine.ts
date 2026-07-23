@@ -35,6 +35,7 @@ function extractHeadlineMetrics(mostRecentYear: Record<string, number | null> | 
     dividendYield: mostRecentYear?.dividend_yield ?? null,
     roic: mostRecentYear?.roic ?? null,
     fcfYield: mostRecentYear?.fcf_yield ?? null,
+    revenueGrowth1y: mostRecentYear?.growth_revenue_1y ?? null,
   };
 }
 
