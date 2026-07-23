@@ -14,7 +14,16 @@ interface XbrlFact {
 interface CompanyFacts {
   facts?: {
     "us-gaap"?: Record<string, { units?: Record<string, XbrlFact[]> }>;
+    dei?: Record<string, { units?: Record<string, XbrlFact[]> }>;
   };
+}
+
+export interface ApproxMarketValue {
+  /** Aggregate market value of common equity held by non-affiliates, as reported on the most recent 10-K cover page. */
+  publicFloat: number;
+  sharesOutstanding: number | null;
+  /** Filing cover-page date the figures are "as of" — this is NOT a live/current price. */
+  asOfDate: string;
 }
 
 /**
@@ -88,6 +97,34 @@ export class SecEdgarProvider extends FinancialDataProvider {
 
   async getQuote() {
     return null; // SEC EDGAR has no price data; pair with YahooFinanceProvider for quotes.
+  }
+
+  /**
+   * Fallback used when the live price source is unavailable. `dei:EntityPublicFloat`
+   * is required on every 10-K cover page — a real, official, keyless
+   * approximation of market cap, just not a live one (it's as of the
+   * filing's cover-page date, typically the end of the prior fiscal Q2).
+   */
+  async getApproxMarketValue(ticker: string): Promise<ApproxMarketValue | null> {
+    const cik = await this.cikFor(ticker);
+    if (!cik) return null;
+    const facts = await this.fetchCompanyFacts(cik);
+    const floatFacts = facts?.facts?.dei?.EntityPublicFloat?.units?.USD ?? [];
+    const latestFloat = floatFacts
+      .filter((f) => f.form === "10-K")
+      .sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
+    if (!latestFloat) return null;
+
+    const sharesFacts = facts?.facts?.dei?.EntityCommonStockSharesOutstanding?.units?.shares ?? [];
+    const latestShares = sharesFacts
+      .filter((f) => f.form === "10-K")
+      .sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
+
+    return {
+      publicFloat: latestFloat.val,
+      sharesOutstanding: latestShares?.val ?? null,
+      asOfDate: latestFloat.end,
+    };
   }
 
   async getCompanyProfile(ticker: string): Promise<CompanyProfileResult | null> {
