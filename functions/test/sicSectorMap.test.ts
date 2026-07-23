@@ -11,6 +11,10 @@ describe("sectorFromSicCode", () => {
     expect(sectorFromSicCode(3571)).toBe("Technology");
   });
 
+  it("maps REITs (6798) to Real Estate, not the broader Financials holding-office range", () => {
+    expect(sectorFromSicCode(6798)).toBe("Real Estate");
+  });
+
   it("still maps the broader chemicals range to Materials outside the pharma carve-out", () => {
     expect(sectorFromSicCode(2810)).toBe("Materials");
   });

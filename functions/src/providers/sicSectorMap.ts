@@ -15,6 +15,7 @@ export function sectorFromSicCode(sic: number | null): Sector | null {
   if (sic === null || Number.isNaN(sic)) return null;
 
   // --- Narrow carve-outs first ---
+  if (sic === 6798) return "Real Estate"; // REITs — sit in the 6700s "holding offices" division, not 6500s
   if (sic >= 2830 && sic <= 2836) return "Healthcare"; // Pharmaceuticals, biological products
   if (sic >= 3570 && sic <= 3579) return "Technology"; // Computer & office equipment
   if (sic >= 3660 && sic <= 3699) return "Technology"; // Communications equipment, electronic components
