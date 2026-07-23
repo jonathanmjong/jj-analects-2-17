@@ -2,7 +2,7 @@ import { collections, FieldValue } from "../lib/firestore.js";
 import { log } from "../lib/logger.js";
 
 const WIKI_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies";
-const USER_AGENT = "Proverbs21-5 research app (contact: jonathanmjong@gmail.com)";
+const USER_AGENT = "Analects217 research app (contact: jonathanmjong@gmail.com)";
 
 /**
  * Keyless S&P 500 constituent list, scraped from Wikipedia's maintained

@@ -16,7 +16,7 @@ export function LoginPage() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col items-center py-16 text-center">
-      <h1 className="text-3xl font-semibold tracking-tight">Sign in to Proverbs 21:5</h1>
+      <h1 className="text-3xl font-semibold tracking-tight">Sign in to Analects 2.17</h1>
       <p className="mt-3 text-muted-foreground">
         A multi-factor ranking model across valuation, profitability, growth, financial strength, capital
         allocation, and earnings quality for every mid and large-cap company.

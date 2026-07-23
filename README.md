@@ -1,6 +1,7 @@
-# Proverbs 21:5
+# Analects 2.17
 
-> "The plans of the diligent lead surely to abundance." — Proverbs 21:5
+> "When you know a thing, to hold that you know it; and when you do not know a thing, to allow that you do not
+> know it — this is knowledge." — Analects 2.17
 
 A multi-factor investment ranking platform for mid and large-cap equities: valuation, profitability, growth,
 financial strength, capital allocation, and earnings quality, scored and ranked across every company in the

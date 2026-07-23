@@ -66,7 +66,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
     requiresApiKey: false,
   };
 
-  private readonly userAgent = "Proverbs21-5 research app (contact: jonathanmjong@gmail.com)";
+  private readonly userAgent = "Analects217 research app (contact: jonathanmjong@gmail.com)";
   private tickerToCik = new Map<string, string>();
   private tickerMapLoaded = false;
 

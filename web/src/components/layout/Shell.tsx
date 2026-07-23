@@ -18,7 +18,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex h-full flex-col px-3 py-4">
       <Link to="/" className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-hover" onClick={onNavigate}>
         <span className="text-base leading-none">📈</span>
-        <span className="text-sm font-semibold">Proverbs 21:5</span>
+        <span className="text-sm font-semibold">Analects 2.17</span>
       </Link>
 
       <nav className="mt-4 flex flex-col gap-0.5">
@@ -122,7 +122,7 @@ export function Shell() {
           </button>
           <Link to="/" className="flex items-center gap-2">
             <span className="text-base leading-none">📈</span>
-            <span className="text-sm font-semibold">Proverbs 21:5</span>
+            <span className="text-sm font-semibold">Analects 2.17</span>
           </Link>
         </div>
 
@@ -130,8 +130,9 @@ export function Shell() {
           <Outlet />
         </main>
         <footer className="border-t border-border px-4 py-6 text-center text-xs text-muted-foreground sm:px-6 md:px-10">
-          Proverbs 21:5 — "The plans of the diligent lead surely to abundance." Data from Yahoo Finance and SEC
-          EDGAR; not investment advice.
+          Analects 2.17 — "When you know a thing, to hold that you know it; and when you do not know a thing, to
+          allow that you do not know it — this is knowledge." Data from Yahoo Finance and SEC EDGAR; not investment
+          advice.
         </footer>
       </div>
     </div>
