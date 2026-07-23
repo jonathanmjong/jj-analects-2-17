@@ -84,10 +84,10 @@ export const cleanupUniverse = onSchedule(
     for (const doc of companiesSnap.docs) {
       if (toDelete.has(doc.id)) continue; // already flagged as a duplicate
       const incomeSnap = await collections.incomeStatements(doc.id).limit(5).get();
-      const hasRealFinancials = incomeSnap.docs.some((d) => {
-        const data = d.data();
-        return data.revenue !== null || data.netIncome !== null;
-      });
+      // Revenue specifically, not netIncome — investment vehicles (ETFs,
+      // trusts) commonly report net income from fund holdings but not
+      // revenue-from-customers. See SecEdgarProvider.hasOperatingFinancials.
+      const hasRealFinancials = incomeSnap.docs.some((d) => d.data().revenue !== null);
       if (!hasRealFinancials) {
         toDelete.add(doc.id);
         nonOperatingCount++;

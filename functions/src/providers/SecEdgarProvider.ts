@@ -243,9 +243,18 @@ export class SecEdgarProvider extends FinancialDataProvider {
     });
   }
 
-  /** True for actual operating companies; false for ETFs/trusts/funds that file EntityPublicFloat but don't report standard operating financials. */
+  /**
+   * True for actual operating companies; false for ETFs/trusts/funds that
+   * file EntityPublicFloat but don't report standard operating financials.
+   * Deliberately checks only revenue tags, not NetIncomeLoss — investment
+   * vehicles commonly report NetIncomeLoss too (their fund income), so it's
+   * not a reliable signal on its own. Revenue-from-customers is: operating
+   * companies almost universally report it, passive investment vehicles
+   * almost never do (empirically confirmed against a crypto ETF that had
+   * NetIncomeLoss but no Revenues tag at all).
+   */
   private hasOperatingFinancials(facts: CompanyFacts | null): boolean {
-    const tags = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "NetIncomeLoss"];
+    const tags = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"];
     return tags.some((tag) =>
       (facts?.facts?.["us-gaap"]?.[tag]?.units?.USD ?? []).some((f) => f.form === "10-K"),
     );
