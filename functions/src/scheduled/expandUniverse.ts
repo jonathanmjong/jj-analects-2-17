@@ -11,9 +11,11 @@ const MID_CAP_FLOOR = 2_000_000_000;
 /** Large-cap floor, used only to label marketCapTier — doesn't affect inclusion. */
 const LARGE_CAP_FLOOR = 10_000_000_000;
 
-const BATCH_SIZE = 300;
+const BATCH_SIZE = 150;
 const CONCURRENCY = 5;
 const REQUEST_STAGGER_MS = 250;
+/** How long a claimed lock is honored before being considered abandoned (crashed invocation). */
+const LOCK_DURATION_MS = 8 * 60 * 1000;
 
 const cursorRef = () => db.collection("system").doc("universeExpansion");
 
@@ -23,6 +25,7 @@ interface ExpansionState {
   screenedCount: number;
   qualifiedCount: number;
   status: "in_progress" | "complete";
+  lockedUntil?: number;
 }
 
 async function loadState(totalTickers: number): Promise<ExpansionState> {
@@ -35,26 +38,45 @@ async function loadState(totalTickers: number): Promise<ExpansionState> {
 }
 
 /**
+ * Claims the expansion lock in a transaction so overlapping invocations
+ * (the schedule can fire again before a slow batch finishes) don't race on
+ * the same cursor and double up SEC EDGAR requests. Returns null if another
+ * invocation currently holds a live lock.
+ */
+async function claimLock(totalTickers: number): Promise<ExpansionState | null> {
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(cursorRef());
+    const state: ExpansionState = snap.exists
+      ? { ...(snap.data() as ExpansionState), totalTickers }
+      : { cursor: 0, totalTickers, screenedCount: 0, qualifiedCount: 0, status: "in_progress" };
+
+    if (state.status === "complete" && state.cursor >= totalTickers) return null;
+    if (state.lockedUntil && state.lockedUntil > Date.now()) return null; // another invocation is actively running
+
+    tx.set(cursorRef(), { ...state, lockedUntil: Date.now() + LOCK_DURATION_MS }, { merge: true });
+    return state;
+  });
+}
+
+/**
  * Resumable, checkpointed screen of every SEC-registered ticker (~10,000)
  * against a market-cap floor, so the ranked universe becomes "every mid and
  * large cap company" (data-driven) rather than a hand-picked index list.
  * One SEC EntityPublicFloat lookup per candidate (~1 HTTP call) is cheap
  * enough to screen the whole universe; only names that clear MID_CAP_FLOOR
  * get the full 5-statement ingestion (ingestFundamentalsForTicker, ~2 more
- * calls). Progress is checkpointed in system/universeExpansion so this can
- * run in small batches across many scheduled invocations without ever
- * re-scanning tickers already screened.
+ * calls). Progress is checkpointed in system/universeExpansion, guarded by
+ * a short-lived lock, so this runs in small batches across many scheduled
+ * invocations without re-scanning tickers or racing itself if a batch runs
+ * long enough to overlap the next scheduled tick.
  */
 export const expandUniverse = onSchedule(
-  { schedule: "every 3 minutes", timeoutSeconds: 540, memory: "512MiB" },
+  { schedule: "every 5 minutes", timeoutSeconds: 540, memory: "512MiB" },
   async () => {
     const startedAt = new Date().toISOString();
     const allTickers = await secEdgar.listUniverse();
-    const state = await loadState(allTickers.length);
-
-    if (state.status === "complete" && state.cursor >= allTickers.length) {
-      return; // nothing left to screen
-    }
+    const state = await claimLock(allTickers.length);
+    if (!state) return; // complete, or another invocation is already running this batch
 
     const batch = allTickers.slice(state.cursor, state.cursor + BATCH_SIZE);
     const succeeded: string[] = [];
@@ -101,6 +123,7 @@ export const expandUniverse = onSchedule(
         screenedCount: state.screenedCount + batch.length,
         qualifiedCount: state.qualifiedCount + qualifiedThisRun,
         status: done ? "complete" : "in_progress",
+        lockedUntil: FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
