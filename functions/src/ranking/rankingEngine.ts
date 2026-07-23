@@ -1,4 +1,4 @@
-import type { CategoryScore, MetricCategory, RankingResult, RankingWeightsConfig } from "@proverbs/shared";
+import type { CategoryScore, HeadlineMetrics, MetricCategory, RankingResult, RankingWeightsConfig } from "@proverbs/shared";
 import { DEFAULT_RANKING_CONFIG, DEFAULT_YEAR_WEIGHTS, METRIC_CATEGORIES } from "@proverbs/shared";
 import { collections, db } from "../lib/firestore.js";
 import { METRIC_DEFINITIONS } from "../metrics/definitions.js";
@@ -26,6 +26,16 @@ async function loadUniverseRawScores(tickers: string[]): Promise<CompanyYearScor
     }),
   );
   return results;
+}
+
+function extractHeadlineMetrics(mostRecentYear: Record<string, number | null> | undefined): HeadlineMetrics {
+  return {
+    peTtm: mostRecentYear?.pe_ttm ?? null,
+    evEbitda: mostRecentYear?.ev_ebitda ?? null,
+    dividendYield: mostRecentYear?.dividend_yield ?? null,
+    roic: mostRecentYear?.roic ?? null,
+    fcfYield: mostRecentYear?.fcf_yield ?? null,
+  };
 }
 
 /**
@@ -76,7 +86,7 @@ export async function computeRankings(
     metricUnitScores.set(metric.key, perYear);
   }
 
-  const results: RankingResult[] = universe.map(({ ticker }) => {
+  const results: RankingResult[] = universe.map(({ ticker, byYear }) => {
     const categoryScores: CategoryScore[] = METRIC_CATEGORIES.map((category) => {
       const metricsInCategory = enabledMetrics.filter((m) => m.category === category);
       const metricScoresForCompany: number[] = [];
@@ -135,6 +145,7 @@ export async function computeRankings(
       peerCount: tickers.length,
       categoryScores,
       weightsUsed: config,
+      headlineMetrics: extractHeadlineMetrics(byYear[0]),
     };
   });
 
@@ -165,6 +176,7 @@ export async function persistRankings(results: RankingResult[]): Promise<void> {
           latest: {
             overallScore: result.overallScore,
             overallRank: result.overallRank,
+            headlineMetrics: result.headlineMetrics,
           },
         },
         { merge: true },

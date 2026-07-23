@@ -51,6 +51,16 @@ export interface LatestSnapshot {
   sharesOutstanding: number | null;
   overallScore: number | null;
   overallRank: number | null;
+  /** Raw P/E, EV/EBITDA, dividend yield, ROIC, FCF yield — see HeadlineMetrics in ranking.ts. Populated by the ranking engine, not price ingestion. */
+  headlineMetrics?: HeadlineMetrics;
+}
+
+export interface HeadlineMetrics {
+  peTtm: number | null;
+  evEbitda: number | null;
+  dividendYield: number | null;
+  roic: number | null;
+  fcfYield: number | null;
 }
 
 /** Firestore subcollection: companies/{ticker}/marketData/{YYYY-MM-DD} */

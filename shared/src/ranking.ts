@@ -1,4 +1,5 @@
 import type { MetricCategory, NormalizationMethod } from "./metrics.js";
+import type { HeadlineMetrics } from "./company.js";
 
 export interface RankingWeightsConfig {
   categoryWeights: Record<MetricCategory, number>;
@@ -26,6 +27,7 @@ export interface RankingResult {
   peerCount: number;
   categoryScores: CategoryScore[];
   weightsUsed: RankingWeightsConfig;
+  headlineMetrics: HeadlineMetrics;
 }
 
 export const DEFAULT_RANKING_CONFIG: RankingWeightsConfig = {

@@ -11,7 +11,7 @@ import {
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { Download } from "lucide-react";
+import { Download, SlidersHorizontal } from "lucide-react";
 import type { Company, Sector } from "@proverbs/shared";
 import { SECTORS } from "@proverbs/shared";
 import { useCompaniesList } from "../hooks/useCompanies";
@@ -20,8 +20,26 @@ import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { Slider } from "../components/ui/Slider";
 import { ScorePill } from "../components/ui/ScorePill";
-import { formatCurrency } from "../lib/utils";
+import { formatCurrency, formatMultiple, formatPercent } from "../lib/utils";
 import { exportRowsAsCsv, exportRowsAsJson, exportRowsAsXlsx } from "../lib/exporters";
+
+interface ValueFilters {
+  marketCapMinB: string;
+  marketCapMaxB: string;
+  maxPe: string;
+  maxEvEbitda: string;
+  minDividendYieldPct: string;
+  minRoicPct: string;
+}
+
+const EMPTY_VALUE_FILTERS: ValueFilters = {
+  marketCapMinB: "",
+  marketCapMaxB: "",
+  maxPe: "",
+  maxEvEbitda: "",
+  minDividendYieldPct: "",
+  minRoicPct: "",
+};
 
 /** Count of registered valuation metrics (see functions/src/metrics/definitions.ts) — used to render "x/10" and to drive the data-availability filter slider. */
 const VALUATION_METRIC_COUNT = 10;
@@ -57,6 +75,23 @@ const columns: ColumnDef<Company>[] = [
     cell: ({ row }) => formatCurrency(row.original.latest?.sharePrice ?? null),
   },
   {
+    id: "peTtm",
+    header: "P/E",
+    cell: ({ row }) => formatMultiple(row.original.latest?.headlineMetrics?.peTtm ?? null),
+    sortingFn: (a, b) => (a.original.latest?.headlineMetrics?.peTtm ?? Infinity) - (b.original.latest?.headlineMetrics?.peTtm ?? Infinity),
+  },
+  {
+    id: "roic",
+    header: "ROIC",
+    cell: ({ row }) => formatPercent(row.original.latest?.headlineMetrics?.roic ?? null),
+    sortingFn: (a, b) => (a.original.latest?.headlineMetrics?.roic ?? -Infinity) - (b.original.latest?.headlineMetrics?.roic ?? -Infinity),
+  },
+  {
+    id: "dividendYield",
+    header: "Div. Yield",
+    cell: ({ row }) => formatPercent(row.original.latest?.headlineMetrics?.dividendYield ?? null),
+  },
+  {
     accessorKey: "latest.overallScore",
     header: "Score",
     cell: ({ row }) => <ScorePill score={row.original.latest?.overallScore ?? null} />,
@@ -82,6 +117,7 @@ export function RankingsPage() {
   const [globalFilter, setGlobalFilter] = useState("");
   const [sectorFilter, setSectorFilter] = useState<Sector | "all">("all");
   const [minValuationMetrics, setMinValuationMetrics] = useState(0);
+  const [valueFilters, setValueFilters] = useState<ValueFilters>(EMPTY_VALUE_FILTERS);
   const [sorting, setSorting] = useState<SortingState>([{ id: "latest.overallRank", desc: false }]);
   const [visibility, setVisibility] = useState<VisibilityState>({ industry: false, "latest.sharePrice": false });
 
@@ -90,15 +126,35 @@ export function RankingsPage() {
     return valuationScore?.metricsIncluded ?? 0;
   }
 
+  const activeValueFilterCount = Object.values(valueFilters).filter((v) => v !== "").length;
+
   const filteredData = useMemo(() => {
     const rows = companies ?? [];
+    const marketCapMin = valueFilters.marketCapMinB ? Number(valueFilters.marketCapMinB) * 1e9 : null;
+    const marketCapMax = valueFilters.marketCapMaxB ? Number(valueFilters.marketCapMaxB) * 1e9 : null;
+    const maxPe = valueFilters.maxPe ? Number(valueFilters.maxPe) : null;
+    const maxEvEbitda = valueFilters.maxEvEbitda ? Number(valueFilters.maxEvEbitda) : null;
+    const minDividendYield = valueFilters.minDividendYieldPct ? Number(valueFilters.minDividendYieldPct) / 100 : null;
+    const minRoic = valueFilters.minRoicPct ? Number(valueFilters.minRoicPct) / 100 : null;
+
     return rows.filter((c) => {
       if (sectorFilter !== "all" && c.sector !== sectorFilter) return false;
       if (minValuationMetrics > 0 && valuationMetricsAvailable(c.ticker) < minValuationMetrics) return false;
+
+      const marketCap = c.latest?.marketCap ?? null;
+      if (marketCapMin !== null && (marketCap === null || marketCap < marketCapMin)) return false;
+      if (marketCapMax !== null && (marketCap === null || marketCap > marketCapMax)) return false;
+
+      const headline = c.latest?.headlineMetrics;
+      if (maxPe !== null && (headline?.peTtm == null || headline.peTtm > maxPe)) return false;
+      if (maxEvEbitda !== null && (headline?.evEbitda == null || headline.evEbitda > maxEvEbitda)) return false;
+      if (minDividendYield !== null && (headline?.dividendYield == null || headline.dividendYield < minDividendYield)) return false;
+      if (minRoic !== null && (headline?.roic == null || headline.roic < minRoic)) return false;
+
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companies, sectorFilter, minValuationMetrics, rankings]);
+  }, [companies, sectorFilter, minValuationMetrics, rankings, valueFilters]);
 
   const tableColumns = useMemo(() => [...columns, buildValuationColumn(rankings)], [rankings]);
 
@@ -132,6 +188,9 @@ export function RankingsPage() {
       industry: r.original.industry,
       marketCap: r.original.latest?.marketCap,
       sharePrice: r.original.latest?.sharePrice,
+      peTtm: r.original.latest?.headlineMetrics?.peTtm,
+      roic: r.original.latest?.headlineMetrics?.roic,
+      dividendYield: r.original.latest?.headlineMetrics?.dividendYield,
       overallScore: r.original.latest?.overallScore,
       isSp500: r.original.isSp500,
     }));
@@ -178,6 +237,81 @@ export function RankingsPage() {
             value={minValuationMetrics}
             onChange={(e) => setMinValuationMetrics(Number(e.target.value))}
           />
+        </div>
+
+        <div className="relative">
+          <details className="group">
+            <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-sm">
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Value filters
+              {activeValueFilterCount > 0 && (
+                <span className="rounded-full bg-accent px-1.5 text-[11px] text-accent-foreground">{activeValueFilterCount}</span>
+              )}
+            </summary>
+            <div className="absolute z-10 mt-2 w-64 space-y-2 rounded-md border border-border bg-surface p-3 shadow-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-muted-foreground">
+                  Market cap min ($B)
+                  <Input
+                    type="number"
+                    value={valueFilters.marketCapMinB}
+                    onChange={(e) => setValueFilters((f) => ({ ...f, marketCapMinB: e.target.value }))}
+                    className="mt-1"
+                  />
+                </label>
+                <label className="text-xs text-muted-foreground">
+                  Market cap max ($B)
+                  <Input
+                    type="number"
+                    value={valueFilters.marketCapMaxB}
+                    onChange={(e) => setValueFilters((f) => ({ ...f, marketCapMaxB: e.target.value }))}
+                    className="mt-1"
+                  />
+                </label>
+              </div>
+              <label className="block text-xs text-muted-foreground">
+                Max P/E (TTM)
+                <Input
+                  type="number"
+                  value={valueFilters.maxPe}
+                  onChange={(e) => setValueFilters((f) => ({ ...f, maxPe: e.target.value }))}
+                  className="mt-1"
+                />
+              </label>
+              <label className="block text-xs text-muted-foreground">
+                Max EV/EBITDA
+                <Input
+                  type="number"
+                  value={valueFilters.maxEvEbitda}
+                  onChange={(e) => setValueFilters((f) => ({ ...f, maxEvEbitda: e.target.value }))}
+                  className="mt-1"
+                />
+              </label>
+              <label className="block text-xs text-muted-foreground">
+                Min dividend yield (%)
+                <Input
+                  type="number"
+                  value={valueFilters.minDividendYieldPct}
+                  onChange={(e) => setValueFilters((f) => ({ ...f, minDividendYieldPct: e.target.value }))}
+                  className="mt-1"
+                />
+              </label>
+              <label className="block text-xs text-muted-foreground">
+                Min ROIC (%)
+                <Input
+                  type="number"
+                  value={valueFilters.minRoicPct}
+                  onChange={(e) => setValueFilters((f) => ({ ...f, minRoicPct: e.target.value }))}
+                  className="mt-1"
+                />
+              </label>
+              {activeValueFilterCount > 0 && (
+                <Button variant="ghost" size="sm" className="w-full" onClick={() => setValueFilters(EMPTY_VALUE_FILTERS)}>
+                  Clear value filters
+                </Button>
+              )}
+            </div>
+          </details>
         </div>
 
         <div className="relative">
