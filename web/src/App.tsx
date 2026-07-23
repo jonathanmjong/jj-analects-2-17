@@ -1,35 +1,52 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Shell } from "./components/layout/Shell";
 import { RequireSubscription } from "./components/layout/RequireSubscription";
-import { LoginPage } from "./pages/LoginPage";
-import { BillingPage } from "./pages/BillingPage";
-import { HomePage } from "./pages/HomePage";
-import { RankingsPage } from "./pages/RankingsPage";
-import { CompanyPage } from "./pages/CompanyPage";
-import { ComparePage } from "./pages/ComparePage";
-import { SectorsOverviewPage } from "./pages/SectorsOverviewPage";
-import { SectorDetailPage } from "./pages/SectorDetailPage";
-import { AdminPage } from "./pages/AdminPage";
+import { Spinner } from "./components/ui/Spinner";
+
+const LoginPage = lazy(() => import("./pages/LoginPage").then((m) => ({ default: m.LoginPage })));
+const BillingPage = lazy(() => import("./pages/BillingPage").then((m) => ({ default: m.BillingPage })));
+const AdminPage = lazy(() => import("./pages/AdminPage").then((m) => ({ default: m.AdminPage })));
+const HomePage = lazy(() => import("./pages/HomePage").then((m) => ({ default: m.HomePage })));
+const RankingsPage = lazy(() => import("./pages/RankingsPage").then((m) => ({ default: m.RankingsPage })));
+const CompanyPage = lazy(() => import("./pages/CompanyPage").then((m) => ({ default: m.CompanyPage })));
+const ComparePage = lazy(() => import("./pages/ComparePage").then((m) => ({ default: m.ComparePage })));
+const SectorsOverviewPage = lazy(() =>
+  import("./pages/SectorsOverviewPage").then((m) => ({ default: m.SectorsOverviewPage })),
+);
+const SectorDetailPage = lazy(() =>
+  import("./pages/SectorDetailPage").then((m) => ({ default: m.SectorDetailPage })),
+);
+
+function PageFallback() {
+  return (
+    <div className="flex h-[50vh] items-center justify-center">
+      <Spinner />
+    </div>
+  );
+}
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<Shell />}>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/billing" element={<BillingPage />} />
-        <Route path="/admin" element={<AdminPage />} />
+    <Suspense fallback={<PageFallback />}>
+      <Routes>
+        <Route element={<Shell />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/billing" element={<BillingPage />} />
+          <Route path="/admin" element={<AdminPage />} />
 
-        <Route element={<RequireSubscription />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/rankings" element={<RankingsPage />} />
-          <Route path="/company/:ticker" element={<CompanyPage />} />
-          <Route path="/compare" element={<ComparePage />} />
-          <Route path="/sectors" element={<SectorsOverviewPage />} />
-          <Route path="/sectors/:sector" element={<SectorDetailPage />} />
+          <Route element={<RequireSubscription />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/rankings" element={<RankingsPage />} />
+            <Route path="/company/:ticker" element={<CompanyPage />} />
+            <Route path="/compare" element={<ComparePage />} />
+            <Route path="/sectors" element={<SectorsOverviewPage />} />
+            <Route path="/sectors/:sector" element={<SectorDetailPage />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
-
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }

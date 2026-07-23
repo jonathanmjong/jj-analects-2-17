@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { METRIC_CATEGORIES, type MetricDefinition } from "@proverbs/shared";
+import { DEFAULT_YEAR_WEIGHTS, METRIC_CATEGORIES, type MetricDefinition } from "@proverbs/shared";
 import { useCompanyDetail } from "../hooks/useCompanyDetail";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { useCustomRankings } from "../hooks/useCustomRankings";
@@ -90,7 +90,7 @@ export function CompanyPage() {
   if (!data) return <p className="text-muted-foreground">No data for {ticker} yet.</p>;
 
   const { company } = data;
-  const latestMetricPeriod = data.metricScoresByPeriod[0];
+  const yearColumns = data.metricScoresByPeriod.slice(0, 5);
 
   return (
     <div className="space-y-8">
@@ -201,32 +201,52 @@ export function CompanyPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Metric Breakdown (most recent fiscal year)</CardTitle>
+          <CardTitle>Metric Breakdown — up to 5 fiscal years</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
+          <p className="mb-4 text-xs text-muted-foreground">
+            Year weights (most recent first): {DEFAULT_YEAR_WEIGHTS.map((w) => `${w * 100}%`).join(" / ")}. A missing
+            year is excluded from a metric's score and the remaining years' weights are renormalized — it is never
+            treated as zero.
+          </p>
           {METRIC_CATEGORIES.map((category) => (
             <div key={category} className="mb-6">
               <h3 className="mb-2 text-sm font-semibold">{CATEGORY_LABELS[category]}</h3>
               <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-muted-foreground">
+                    <th className="py-2 pr-4 font-medium">Metric</th>
+                    {yearColumns.map((period, idx) => (
+                      <th key={period.periodKey} className="py-2 pr-4 text-right font-medium">
+                        {period.periodKey}
+                        <div className="text-[10px] normal-case text-muted-foreground/70">
+                          {((DEFAULT_YEAR_WEIGHTS[idx] ?? 0) * 100).toFixed(0)}% weight
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
                 <tbody>
-                  {metricsByCategory[category]?.map((metric) => {
-                    const score = latestMetricPeriod?.scores?.[metric.key];
-                    const missing = !score || score.isMissing;
-                    return (
-                      <tr key={metric.key} className="border-t border-border">
-                        <td className="py-2 pr-4 text-muted-foreground">{metric.label}</td>
-                        <td className="py-2 text-right">
-                          {missing ? (
-                            <span className="text-xs text-muted-foreground">Data missing — excluded from weighting</span>
-                          ) : metric.unit === "percent" ? (
-                            formatPercent(score.rawValue)
-                          ) : (
-                            formatNumber(score.rawValue, 2)
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {metricsByCategory[category]?.map((metric) => (
+                    <tr key={metric.key} className="border-t border-border">
+                      <td className="py-2 pr-4 text-muted-foreground">{metric.label}</td>
+                      {yearColumns.map((period) => {
+                        const score = period.scores?.[metric.key];
+                        const missing = !score || score.isMissing;
+                        return (
+                          <td key={period.periodKey} className="py-2 pr-4 text-right">
+                            {missing ? (
+                              <span className="text-xs text-muted-foreground">Data missing</span>
+                            ) : metric.unit === "percent" ? (
+                              formatPercent(score.rawValue)
+                            ) : (
+                              formatNumber(score.rawValue, 2)
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

@@ -15,11 +15,16 @@ import { Download } from "lucide-react";
 import type { Company, Sector } from "@proverbs/shared";
 import { SECTORS } from "@proverbs/shared";
 import { useCompaniesList } from "../hooks/useCompanies";
+import { useAllRankings } from "../hooks/useAllRankings";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
+import { Slider } from "../components/ui/Slider";
 import { ScorePill } from "../components/ui/ScorePill";
 import { formatCurrency } from "../lib/utils";
 import { exportRowsAsCsv, exportRowsAsJson, exportRowsAsXlsx } from "../lib/exporters";
+
+/** Count of registered valuation metrics (see functions/src/metrics/definitions.ts) — used to render "x/10" and to drive the data-availability filter slider. */
+const VALUATION_METRIC_COUNT = 10;
 
 const columns: ColumnDef<Company>[] = [
   {
@@ -60,21 +65,46 @@ const columns: ColumnDef<Company>[] = [
   { accessorKey: "isSp500", header: "S&P 500", cell: ({ getValue }) => (getValue<boolean>() ? "Yes" : "No") },
 ];
 
+function buildValuationColumn(rankings: Map<string, import("@proverbs/shared").RankingResult> | undefined): ColumnDef<Company> {
+  return {
+    id: "valuationDataAvailable",
+    header: "Valuation Data",
+    cell: ({ row }) => {
+      const count = rankings?.get(row.original.ticker)?.categoryScores.find((c) => c.category === "valuation")?.metricsIncluded ?? 0;
+      return `${count}/${VALUATION_METRIC_COUNT}`;
+    },
+  };
+}
+
 export function RankingsPage() {
   const { data: companies, isLoading } = useCompaniesList({ limitTo: 500 });
+  const { data: rankings } = useAllRankings();
   const [globalFilter, setGlobalFilter] = useState("");
   const [sectorFilter, setSectorFilter] = useState<Sector | "all">("all");
+  const [minValuationMetrics, setMinValuationMetrics] = useState(0);
   const [sorting, setSorting] = useState<SortingState>([{ id: "latest.overallRank", desc: false }]);
   const [visibility, setVisibility] = useState<VisibilityState>({ industry: false, "latest.sharePrice": false });
 
+  function valuationMetricsAvailable(ticker: string): number {
+    const valuationScore = rankings?.get(ticker)?.categoryScores.find((c) => c.category === "valuation");
+    return valuationScore?.metricsIncluded ?? 0;
+  }
+
   const filteredData = useMemo(() => {
     const rows = companies ?? [];
-    return sectorFilter === "all" ? rows : rows.filter((c) => c.sector === sectorFilter);
-  }, [companies, sectorFilter]);
+    return rows.filter((c) => {
+      if (sectorFilter !== "all" && c.sector !== sectorFilter) return false;
+      if (minValuationMetrics > 0 && valuationMetricsAvailable(c.ticker) < minValuationMetrics) return false;
+      return true;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companies, sectorFilter, minValuationMetrics, rankings]);
+
+  const tableColumns = useMemo(() => [...columns, buildValuationColumn(rankings)], [rankings]);
 
   const table = useReactTable({
     data: filteredData,
-    columns,
+    columns: tableColumns,
     state: { sorting, globalFilter, columnVisibility: visibility },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
@@ -136,6 +166,19 @@ export function RankingsPage() {
             </option>
           ))}
         </select>
+
+        <div className="flex min-w-48 items-center gap-2 text-sm">
+          <span className="whitespace-nowrap text-muted-foreground">
+            Min. valuation data: {minValuationMetrics}/{VALUATION_METRIC_COUNT}
+          </span>
+          <Slider
+            min={0}
+            max={VALUATION_METRIC_COUNT}
+            step={1}
+            value={minValuationMetrics}
+            onChange={(e) => setMinValuationMetrics(Number(e.target.value))}
+          />
+        </div>
 
         <div className="relative">
           <details className="group">
