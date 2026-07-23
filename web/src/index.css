@@ -1,48 +1,57 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Helvetica, Arial, sans-serif;
 
-  --color-background: #faf9f5;
+  /* Notion-style palette: near-white surfaces, near-black text (#37352F is
+     Notion's signature ink color), a sparing sidebar-gray, and Notion's own
+     blue (#2383E2) as the sole accent. */
+  --color-background: #ffffff;
+  --color-sidebar: #fbfbfa;
   --color-surface: #ffffff;
-  --color-surface-muted: #f3f1ea;
-  --color-foreground: #1f1e1d;
-  --color-muted-foreground: #6b6862;
-  --color-border: #e7e4db;
-  --color-accent: #d97757;
-  --color-accent-foreground: #fffaf6;
-  --color-positive: #3d7a5c;
-  --color-negative: #bf4c44;
+  --color-surface-muted: #f7f6f3;
+  --color-surface-hover: #efefed;
+  --color-foreground: #37352f;
+  --color-muted-foreground: #787774;
+  --color-border: #e9e9e7;
+  --color-accent: #2383e2;
+  --color-accent-foreground: #ffffff;
+  --color-positive: #2f7e4f;
+  --color-negative: #e03e3e;
 
-  --radius-card: 1rem;
+  --radius-card: 0.5rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-background: #171614;
-    --color-surface: #1f1e1c;
-    --color-surface-muted: #26241f;
-    --color-foreground: #f2f0e9;
-    --color-muted-foreground: #a39d90;
-    --color-border: #34322c;
-    --color-accent: #e08b6a;
-    --color-accent-foreground: #171614;
-    --color-positive: #6bbf95;
-    --color-negative: #e08079;
+    --color-background: #191919;
+    --color-sidebar: #202020;
+    --color-surface: #191919;
+    --color-surface-muted: #252525;
+    --color-surface-hover: #2f2f2f;
+    --color-foreground: #e9e9e7;
+    --color-muted-foreground: #9b9b98;
+    --color-border: #2f2f2f;
+    --color-accent: #4d9fef;
+    --color-accent-foreground: #0a0a0a;
+    --color-positive: #4dab7a;
+    --color-negative: #eb5757;
   }
 }
 
 :root[data-theme="dark"] {
-  --color-background: #171614;
-  --color-surface: #1f1e1c;
-  --color-surface-muted: #26241f;
-  --color-foreground: #f2f0e9;
-  --color-muted-foreground: #a39d90;
-  --color-border: #34322c;
-  --color-accent: #e08b6a;
-  --color-accent-foreground: #171614;
-  --color-positive: #6bbf95;
-  --color-negative: #e08079;
+  --color-background: #191919;
+  --color-sidebar: #202020;
+  --color-surface: #191919;
+  --color-surface-muted: #252525;
+  --color-surface-hover: #2f2f2f;
+  --color-foreground: #e9e9e7;
+  --color-muted-foreground: #9b9b98;
+  --color-border: #2f2f2f;
+  --color-accent: #4d9fef;
+  --color-accent-foreground: #0a0a0a;
+  --color-positive: #4dab7a;
+  --color-negative: #eb5757;
 }
 
 * {
@@ -60,11 +69,12 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 25%, transparent);
 }

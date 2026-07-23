@@ -25,35 +25,35 @@ export function SectorDetailPage() {
 
       <div className="overflow-hidden rounded-card border border-border">
         <table className="w-full text-sm">
-          <thead className="bg-surface-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <thead className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-4 py-3">Rank in sector</th>
-              <th className="px-4 py-3">Company</th>
-              <th className="px-4 py-3">Industry</th>
-              <th className="px-4 py-3">Market Cap</th>
-              <th className="px-4 py-3">Score</th>
+              <th className="border-b border-border px-3 py-2 font-medium">Rank in sector</th>
+              <th className="border-b border-border px-3 py-2 font-medium">Company</th>
+              <th className="border-b border-border px-3 py-2 font-medium">Industry</th>
+              <th className="border-b border-border px-3 py-2 font-medium">Market Cap</th>
+              <th className="border-b border-border px-3 py-2 font-medium">Score</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
                   Loading…
                 </td>
               </tr>
             )}
             {ranked.map((c, idx) => (
-              <tr key={c.ticker} className="border-t border-border hover:bg-surface-muted/60">
-                <td className="px-4 py-3 text-muted-foreground">{idx + 1}</td>
-                <td className="px-4 py-3">
+              <tr key={c.ticker} className="border-b border-border last:border-b-0 hover:bg-surface-hover">
+                <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
+                <td className="px-3 py-2">
                   <Link to={`/company/${c.ticker}`} className="font-medium hover:text-accent">
                     {c.ticker}
                   </Link>
                   <div className="text-xs text-muted-foreground">{c.companyName}</div>
                 </td>
-                <td className="px-4 py-3">{c.industry ?? "—"}</td>
-                <td className="px-4 py-3">{formatCurrency(c.latest?.marketCap ?? null, { compact: true })}</td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2">{c.industry ?? "—"}</td>
+                <td className="px-3 py-2">{formatCurrency(c.latest?.marketCap ?? null, { compact: true })}</td>
+                <td className="px-3 py-2">
                   <ScorePill score={c.latest?.overallScore ?? null} />
                 </td>
               </tr>

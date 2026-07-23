@@ -73,46 +73,46 @@ export function HomePage() {
 
       <div className="overflow-hidden rounded-card border border-border">
         <table className="w-full text-sm">
-          <thead className="bg-surface-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <thead className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-4 py-3">Rank</th>
-              <th className="px-4 py-3">Company</th>
-              <th className="px-4 py-3">Sector</th>
-              <th className="px-4 py-3">Market Cap</th>
-              <th className="px-4 py-3">Score</th>
-              <th className="px-4 py-3">Trend</th>
+              <th className="border-b border-border px-3 py-2 font-medium">Rank</th>
+              <th className="border-b border-border px-3 py-2 font-medium">Company</th>
+              <th className="border-b border-border px-3 py-2 font-medium">Sector</th>
+              <th className="border-b border-border px-3 py-2 font-medium">Market Cap</th>
+              <th className="border-b border-border px-3 py-2 font-medium">Score</th>
+              <th className="border-b border-border px-3 py-2 font-medium">Trend</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
                   Loading…
                 </td>
               </tr>
             )}
             {!isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
                   No ranked companies yet — run the seed/bootstrap job to populate data.
                 </td>
               </tr>
             )}
             {rows.map((row) => (
-              <tr key={row.ticker} className="border-t border-border hover:bg-surface-muted/60">
-                <td className="px-4 py-3 text-muted-foreground">{row.overallRank ?? "—"}</td>
-                <td className="px-4 py-3">
+              <tr key={row.ticker} className="border-b border-border last:border-b-0 hover:bg-surface-hover">
+                <td className="px-3 py-2 text-muted-foreground">{row.overallRank ?? "—"}</td>
+                <td className="px-3 py-2">
                   <Link to={`/company/${row.ticker}`} className="font-medium hover:text-accent">
                     {row.ticker}
                   </Link>
                   <div className="text-xs text-muted-foreground">{row.companyName}</div>
                 </td>
-                <td className="px-4 py-3">{row.sector ? <Badge variant="neutral">{row.sector}</Badge> : "—"}</td>
-                <td className="px-4 py-3">{formatCurrency(row.latest?.marketCap ?? null, { compact: true })}</td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2">{row.sector ? <Badge variant="neutral">{row.sector}</Badge> : "—"}</td>
+                <td className="px-3 py-2">{formatCurrency(row.latest?.marketCap ?? null, { compact: true })}</td>
+                <td className="px-3 py-2">
                   <ScorePill score={row.overallScore} />
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">
+                <td className="px-3 py-2 text-muted-foreground">
                   {row.overallRank && row.overallRank <= 10 ? "Top 10" : row.isSp500 ? "S&P 500" : "—"}
                 </td>
               </tr>

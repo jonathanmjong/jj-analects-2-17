@@ -9,7 +9,7 @@ function scoreColor(score: number | null): string {
 
 export function ScorePill({ score, className }: { score: number | null; className?: string }) {
   return (
-    <span className={cn("inline-flex min-w-12 justify-center rounded-full px-2.5 py-1 text-xs font-semibold", scoreColor(score), className)}>
+    <span className={cn("inline-flex min-w-11 justify-center rounded-[4px] px-2 py-0.5 text-[12px] font-semibold", scoreColor(score), className)}>
       {score === null ? "—" : score.toFixed(1)}
     </span>
   );

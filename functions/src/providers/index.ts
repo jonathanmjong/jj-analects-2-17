@@ -32,7 +32,14 @@ export function getProvider(key: ProviderKey): FinancialDataProvider {
   return registry[key]();
 }
 
-/** Quotes/prices: Yahoo. Statement fundamentals: SEC EDGAR (ground truth from filings). */
+/**
+ * Quotes/prices: Yahoo (SEC EDGAR has no price data).
+ * Statement fundamentals + company profile: SEC EDGAR — ground truth from
+ * filings, and far more reliable to call from Cloud Functions than Yahoo's
+ * unofficial endpoints, which get blocked/rate-limited from cloud provider
+ * IP ranges (observed empirically: company profile lookups silently
+ * returned null in production even though local calls worked).
+ */
 export const PRICE_PROVIDER: ProviderKey = "yahoo_finance";
 export const STATEMENT_PROVIDER: ProviderKey = "sec_edgar";
-export const PROFILE_PROVIDER: ProviderKey = "yahoo_finance";
+export const PROFILE_PROVIDER: ProviderKey = "sec_edgar";

@@ -64,7 +64,7 @@ export function ComparePage() {
         {tickers.map((t, idx) => (
           <span
             key={t}
-            className="flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium"
+            className="flex items-center gap-1 rounded-[4px] px-2 py-1 text-sm font-medium"
             style={{ backgroundColor: `color-mix(in srgb, ${SERIES_COLORS[idx % SERIES_COLORS.length]} 15%, transparent)`, color: SERIES_COLORS[idx % SERIES_COLORS.length] }}
           >
             {t}
@@ -80,7 +80,7 @@ export function ComparePage() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addTicker()}
               placeholder="Add ticker…"
-              className="h-9 w-32"
+              className="h-8 w-32"
             />
             <Button size="sm" variant="outline" onClick={addTicker}>
               Add

@@ -1,5 +1,6 @@
 import type { BalanceSheet, CashFlowStatement, IncomeStatement } from "@proverbs/shared";
 import { FinancialDataProvider, type CompanyProfileResult, type ProviderCapabilities } from "./FinancialDataProvider.js";
+import { sectorFromSicCode } from "./sicSectorMap.js";
 
 interface XbrlFact {
   end: string;
@@ -98,14 +99,16 @@ export class SecEdgarProvider extends FinancialDataProvider {
     if (!res.ok) return null;
     const json = (await res.json()) as {
       name?: string;
+      sic?: string;
       sicDescription?: string;
       addresses?: { business?: { stateOrCountry?: string } };
     };
+    const sicCode = json.sic ? Number.parseInt(json.sic, 10) : null;
     return {
       ticker: ticker.toUpperCase(),
       companyName: json.name ?? ticker.toUpperCase(),
       cik,
-      sector: null,
+      sector: sectorFromSicCode(sicCode),
       industry: json.sicDescription ?? null,
       description: null,
       website: null,

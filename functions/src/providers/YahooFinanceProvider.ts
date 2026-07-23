@@ -34,6 +34,23 @@ export class YahooFinanceProvider extends FinancialDataProvider {
     return result ?? null;
   }
 
+  /**
+   * quoteSummary (used above for statement history) is aggressively
+   * rate-limited in practice ("Too Many Requests" observed in production
+   * even at low volume). The v8/finance/chart endpoint returns basic quote
+   * fields (price, day range, 52-week range, company name) and has held up
+   * reliably, so it's the sole source for getQuote().
+   */
+  private async fetchChartQuote(ticker: string): Promise<Record<string, unknown> | null> {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
+    const res = await fetch(url, { headers: { "User-Agent": this.userAgent, Accept: "application/json" } });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      chart?: { result?: Array<{ meta?: Record<string, unknown> }>; error?: unknown };
+    };
+    return json.chart?.result?.[0]?.meta ?? null;
+  }
+
   private raw(node: unknown): number | null {
     if (node && typeof node === "object" && "raw" in (node as Record<string, unknown>)) {
       const value = (node as Record<string, unknown>).raw;
@@ -43,18 +60,18 @@ export class YahooFinanceProvider extends FinancialDataProvider {
   }
 
   async getQuote(ticker: string): Promise<MarketDataPoint | null> {
-    const summary = await this.fetchQuoteSummary(ticker, ["price", "summaryDetail"]);
-    const price = summary?.price as Record<string, unknown> | undefined;
-    if (!price) return null;
-    const sharePrice = this.raw(price.regularMarketPrice);
-    const marketCap = this.raw(price.marketCap);
+    const meta = await this.fetchChartQuote(ticker);
+    const sharePrice = typeof meta?.regularMarketPrice === "number" ? meta.regularMarketPrice : null;
     if (sharePrice === null) return null;
     return {
       date: new Date().toISOString().slice(0, 10),
       sharePrice,
-      marketCap: marketCap ?? 0,
+      // Yahoo's chart endpoint doesn't include market cap / shares outstanding;
+      // ingestPrices.ts fills these in from the most recently ingested
+      // statement's diluted share count.
+      marketCap: 0,
       enterpriseValue: null,
-      sharesOutstanding: this.raw((summary?.summaryDetail as Record<string, unknown>)?.sharesOutstanding) ?? null,
+      sharesOutstanding: null,
     };
   }
 

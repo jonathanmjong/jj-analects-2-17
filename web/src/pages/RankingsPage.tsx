@@ -157,7 +157,7 @@ export function RankingsPage() {
         <select
           value={sectorFilter}
           onChange={(e) => setSectorFilter(e.target.value as Sector | "all")}
-          className="h-10 rounded-lg border border-border bg-surface px-3 text-sm"
+          className="h-8 rounded-md border border-border bg-surface px-2.5 text-sm"
         >
           <option value="all">All sectors</option>
           {SECTORS.map((s) => (
@@ -182,12 +182,12 @@ export function RankingsPage() {
 
         <div className="relative">
           <details className="group">
-            <summary className="flex h-10 cursor-pointer list-none items-center rounded-lg border border-border bg-surface px-3 text-sm">
+            <summary className="flex h-8 cursor-pointer list-none items-center rounded-md border border-border bg-surface px-2.5 text-sm">
               Columns
             </summary>
-            <div className="absolute z-10 mt-2 w-48 rounded-lg border border-border bg-surface p-3 shadow-md">
+            <div className="absolute z-10 mt-2 w-48 rounded-md border border-border bg-surface p-2 shadow-sm">
               {table.getAllLeafColumns().map((column) => (
-                <label key={column.id} className="flex items-center gap-2 py-1 text-sm">
+                <label key={column.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-surface-hover">
                   <input
                     type="checkbox"
                     checked={column.getIsVisible()}
@@ -215,13 +215,13 @@ export function RankingsPage() {
 
       <div className="overflow-x-auto rounded-card border border-border">
         <table className="w-full text-sm">
-          <thead className="bg-surface-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <thead className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="cursor-pointer select-none whitespace-nowrap px-4 py-3"
+                    className="cursor-pointer select-none whitespace-nowrap border-b border-border px-3 py-2 font-medium hover:text-foreground"
                     onClick={header.column.getToggleSortingHandler()}
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
@@ -234,15 +234,15 @@ export function RankingsPage() {
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={columns.length} className="px-3 py-8 text-center text-muted-foreground">
                   Loading…
                 </td>
               </tr>
             )}
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="border-t border-border hover:bg-surface-muted/60">
+              <tr key={row.id} className="border-b border-border last:border-b-0 hover:bg-surface-hover">
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="whitespace-nowrap px-4 py-3">
+                  <td key={cell.id} className="whitespace-nowrap px-3 py-2">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
