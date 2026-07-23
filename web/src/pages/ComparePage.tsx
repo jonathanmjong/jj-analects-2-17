@@ -7,6 +7,7 @@ import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { ScorePill } from "../components/ui/ScorePill";
 import { SpiderChart } from "../components/charts/SpiderChart";
+import { CategoryBarChart } from "../components/charts/CategoryBarChart";
 import { formatCurrency } from "../lib/utils";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -101,6 +102,24 @@ export function ComparePage() {
             </CardHeader>
             <CardContent>
               <SpiderChart
+                categories={METRIC_CATEGORIES.map((c) => CATEGORY_LABELS[c])}
+                series={rows.map((row, idx) => ({
+                  name: row.ticker,
+                  color: SERIES_COLORS[idx % SERIES_COLORS.length],
+                  values: Object.fromEntries(
+                    (row.ranking?.categoryScores ?? []).map((c) => [CATEGORY_LABELS[c.category], (c.score ?? 0) * 100]),
+                  ),
+                }))}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Category Score Comparison (bar)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CategoryBarChart
                 categories={METRIC_CATEGORIES.map((c) => CATEGORY_LABELS[c])}
                 series={rows.map((row, idx) => ({
                   name: row.ticker,

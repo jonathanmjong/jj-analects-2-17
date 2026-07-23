@@ -12,6 +12,7 @@ import { WatchlistButton } from "../components/ui/WatchlistButton";
 import { Slider } from "../components/ui/Slider";
 import { SpiderChart } from "../components/charts/SpiderChart";
 import { HistoryLineChart } from "../components/charts/HistoryLineChart";
+import { IncomeWaterfall } from "../components/charts/IncomeWaterfall";
 import { formatCurrency, formatNumber, formatPercent } from "../lib/utils";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -200,6 +201,23 @@ export function CompanyPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Revenue → Net Income Bridge (most recent fiscal year)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <IncomeWaterfall
+            data={{
+              revenue: data.income[0]?.revenue ?? null,
+              grossProfit: data.income[0]?.grossProfit ?? null,
+              operatingIncome: data.income[0]?.operatingIncome ?? null,
+              pretaxIncome: data.income[0]?.pretaxIncome ?? null,
+              netIncome: data.income[0]?.netIncome ?? null,
+            }}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
