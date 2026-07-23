@@ -111,7 +111,7 @@ export const cleanupUniverse = onSchedule(
     );
 
     if (toDelete.size > 0) {
-      const results = await computeRankings();
+      const results = await computeRankings(undefined, true);
       await persistRankings(results);
     }
   },

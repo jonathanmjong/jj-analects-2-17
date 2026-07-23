@@ -40,7 +40,7 @@ async function runBootstrap() {
   const priceResult = await ingestPricesForUniverse(SEED_UNIVERSE);
   await logRefresh("prices", PRICE_PROVIDER, priceResult, startedAt);
 
-  const rankings = await computeRankings();
+  const rankings = await computeRankings(undefined, true);
   await persistRankings(rankings);
 
   return {

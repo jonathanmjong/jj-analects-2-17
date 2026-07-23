@@ -20,7 +20,7 @@ export const quarterlyStatementRefresh = onSchedule(
     const result = await ingestFundamentalsForUniverse(tickers);
     await logRefresh("quarterly_statements", STATEMENT_PROVIDER, result, startedAt);
 
-    const rankings = await computeRankings();
+    const rankings = await computeRankings(undefined, true);
     await persistRankings(rankings);
   },
 );

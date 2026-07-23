@@ -8,6 +8,8 @@ interface CompanyYearScores {
   ticker: string;
   /** yearIndex 0 = most recent fiscal year available for this company. */
   byYear: Array<Record<string, number | null>>;
+  /** Parallel to byYear — the metricScores doc id (periodKey) each entry came from. */
+  periodKeys: string[];
 }
 
 async function loadUniverseRawScores(tickers: string[]): Promise<CompanyYearScores[]> {
@@ -22,7 +24,8 @@ async function loadUniverseRawScores(tickers: string[]): Promise<CompanyYearScor
         }
         return values;
       });
-      return { ticker, byYear };
+      const periodKeys = snap.docs.map((doc) => doc.id);
+      return { ticker, byYear, periodKeys };
     }),
   );
   return results;
@@ -39,6 +42,14 @@ function extractHeadlineMetrics(mostRecentYear: Record<string, number | null> | 
   };
 }
 
+interface MetricYearStats {
+  /** ticker -> direction-adjusted unit score (0-1, higher always means "better performing"). */
+  scoreByTicker: Map<string, number>;
+  /** ticker -> rank among peers for this metric+year, 1 = best. */
+  rankByTicker: Map<string, number>;
+  peerCount: number;
+}
+
 /**
  * Cross-sectional ranking engine. For each metric x fiscal-year-index,
  * normalizes raw values across every company that has one (winsorize then
@@ -48,9 +59,18 @@ function extractHeadlineMetrics(mostRecentYear: Record<string, number | null> | 
  * up into category scores (equal-weighted across available metrics), and
  * category scores roll up into the overall score using categoryWeights
  * (renormalized over categories that have data for that company).
+ *
+ * When `persistMetricScores` is true, also writes each metric's percentile
+ * + rank-among-peers back onto companies/{ticker}/metricScores/{periodKey}
+ * (merged into the existing rawValue/isMissing fields) — this is what lets
+ * the Company page show percentile/rank per metric per year, not just the
+ * raw value. Only the scheduled jobs set this to true; the on-demand
+ * custom-weights preview (recomputeRankingsWithConfig) leaves it false
+ * since that's an ephemeral "what if" computation, not the system of record.
  */
 export async function computeRankings(
   config: RankingWeightsConfig = DEFAULT_RANKING_CONFIG,
+  persistMetricScores = false,
 ): Promise<RankingResult[]> {
   const companiesSnap = await collections.companies().get();
   const tickers = companiesSnap.docs.map((d) => d.id);
@@ -59,11 +79,11 @@ export async function computeRankings(
   const yearsIncluded = config.yearsIncluded;
   const enabledMetrics = METRIC_DEFINITIONS.filter((m) => m.enabled);
 
-  // metricKey -> yearIndex -> ticker -> unitScore (0-1, higher already means "better")
-  const metricUnitScores = new Map<string, Map<number, Map<string, number>>>();
+  // metricKey -> yearIndex -> per-metric-year cross-sectional stats
+  const metricUnitScores = new Map<string, Map<number, MetricYearStats>>();
 
   for (const metric of enabledMetrics) {
-    const perYear = new Map<number, Map<string, number>>();
+    const perYear = new Map<number, MetricYearStats>();
     for (let yearIndex = 0; yearIndex < yearsIncluded; yearIndex++) {
       const entries = universe
         .map((c) => ({ ticker: c.ticker, value: c.byYear[yearIndex]?.[metric.key] ?? null }))
@@ -77,12 +97,18 @@ export async function computeRankings(
           ? percentileRanks(winsorized)
           : zscores(winsorized).map(zscoreToUnitScore);
 
-      const tickerScores = new Map<string, number>();
+      const scoreByTicker = new Map<string, number>();
       entries.forEach((e, idx) => {
         const score = metric.direction === "asc" ? 1 - normalized[idx] : normalized[idx];
-        tickerScores.set(e.ticker, score);
+        scoreByTicker.set(e.ticker, score);
       });
-      perYear.set(yearIndex, tickerScores);
+
+      const rankByTicker = new Map<string, number>();
+      [...scoreByTicker.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([ticker], idx) => rankByTicker.set(ticker, idx + 1));
+
+      perYear.set(yearIndex, { scoreByTicker, rankByTicker, peerCount: entries.length });
     }
     metricUnitScores.set(metric.key, perYear);
   }
@@ -101,7 +127,7 @@ export async function computeRankings(
         }
         const availableYearScores: Array<{ weight: number; score: number }> = [];
         for (let yearIndex = 0; yearIndex < yearsIncluded; yearIndex++) {
-          const score = perYear.get(yearIndex)?.get(ticker);
+          const score = perYear.get(yearIndex)?.scoreByTicker.get(ticker);
           if (score === undefined) continue;
           availableYearScores.push({ weight: DEFAULT_YEAR_WEIGHTS[yearIndex] ?? 0, score });
         }
@@ -157,7 +183,56 @@ export async function computeRankings(
     r.overallRank = idx + 1;
   });
 
+  if (persistMetricScores) {
+    await persistMetricPercentiles(universe, metricUnitScores, enabledMetrics.map((m) => m.key));
+  }
+
   return results;
+}
+
+/**
+ * Writes each metric's percentile (direction-adjusted, 0-1, higher = better)
+ * and rank-among-peers back onto the per-company, per-fiscal-year
+ * metricScores docs that computeMetricsForCompany already created, merging
+ * so rawValue/isMissing are untouched.
+ */
+async function persistMetricPercentiles(
+  universe: CompanyYearScores[],
+  metricUnitScores: Map<string, Map<number, MetricYearStats>>,
+  metricKeys: string[],
+): Promise<void> {
+  const writes: Array<{ ticker: string; periodKey: string; scores: Record<string, unknown> }> = [];
+
+  for (const { ticker, periodKeys } of universe) {
+    for (let yearIndex = 0; yearIndex < periodKeys.length; yearIndex++) {
+      const periodKey = periodKeys[yearIndex];
+      const scoresUpdate: Record<string, unknown> = {};
+      let hasAnyUpdate = false;
+
+      for (const metricKey of metricKeys) {
+        const stats = metricUnitScores.get(metricKey)?.get(yearIndex);
+        const percentile = stats?.scoreByTicker.get(ticker);
+        if (percentile === undefined) continue;
+        scoresUpdate[metricKey] = {
+          percentile,
+          rankAmongPeers: stats!.rankByTicker.get(ticker) ?? null,
+          peerCount: stats!.peerCount,
+        };
+        hasAnyUpdate = true;
+      }
+
+      if (hasAnyUpdate) writes.push({ ticker, periodKey, scores: scoresUpdate });
+    }
+  }
+
+  const batchSize = 400;
+  for (let i = 0; i < writes.length; i += batchSize) {
+    const batch = db.batch();
+    for (const w of writes.slice(i, i + batchSize)) {
+      batch.set(collections.metricScores(w.ticker).doc(w.periodKey), { scores: w.scores }, { merge: true });
+    }
+    await batch.commit();
+  }
 }
 
 export async function persistRankings(results: RankingResult[]): Promise<void> {

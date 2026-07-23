@@ -8,7 +8,7 @@ export const recomputeRankingsDaily = onSchedule(
   { schedule: "every day 23:00", timeZone: "America/New_York", timeoutSeconds: 540, memory: "1GiB" },
   async () => {
     const startedAt = new Date().toISOString();
-    const results = await computeRankings();
+    const results = await computeRankings(undefined, true);
     await persistRankings(results);
     await logRefresh(
       "rankings",

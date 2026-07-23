@@ -227,7 +227,8 @@ export function CompanyPage() {
           <p className="mb-4 text-xs text-muted-foreground">
             Year weights (most recent first): {DEFAULT_YEAR_WEIGHTS.map((w) => `${w * 100}%`).join(" / ")}. A missing
             year is excluded from a metric's score and the remaining years' weights are renormalized — it is never
-            treated as zero.
+            treated as zero. "P82 · #12/1319" means this company's value for that metric/year outperforms 82% of
+            peers with data, ranking 12th of 1,319.
           </p>
           {METRIC_CATEGORIES.map((category) => (
             <div key={category} className="mb-6">
@@ -257,10 +258,16 @@ export function CompanyPage() {
                           <td key={period.periodKey} className="py-2 pr-4 text-right">
                             {missing ? (
                               <span className="text-xs text-muted-foreground">Data missing</span>
-                            ) : metric.unit === "percent" ? (
-                              formatPercent(score.rawValue)
                             ) : (
-                              formatNumber(score.rawValue, 2)
+                              <>
+                                <div>{metric.unit === "percent" ? formatPercent(score.rawValue) : formatNumber(score.rawValue, 2)}</div>
+                                {score.percentile !== null && (
+                                  <div className="text-[10px] text-muted-foreground">
+                                    P{Math.round(score.percentile * 100)}
+                                    {score.rankAmongPeers !== null && ` · #${score.rankAmongPeers}/${score.peerCount}`}
+                                  </div>
+                                )}
+                              </>
                             )}
                           </td>
                         );
