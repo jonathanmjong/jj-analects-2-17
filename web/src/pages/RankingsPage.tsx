@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card"
 import { QualityGrowthScatter, type ScatterDatum } from "../components/charts/QualityGrowthScatter";
 import { formatCurrency, formatMultiple, formatPercent } from "../lib/utils";
 import { exportRowsAsCsv, exportRowsAsJson, exportRowsAsXlsx } from "../lib/exporters";
+import { evaluateFormula, FormulaError, parseFormula, type FormulaContext } from "../lib/formulaFilter";
 
 interface ValueFilters {
   marketCapMinB: string;
@@ -76,6 +77,7 @@ const columns: ColumnDef<Company>[] = [
   { accessorKey: "companyName", header: "Company" },
   { accessorKey: "sector", header: "Sector", cell: ({ getValue }) => getValue<string>() ?? "—" },
   { accessorKey: "industry", header: "Industry", cell: ({ getValue }) => getValue<string>() ?? "—" },
+  { accessorKey: "country", header: "Country", cell: ({ getValue }) => getValue<string>() ?? "—" },
   {
     accessorKey: "latest.marketCap",
     header: "Market Cap",
@@ -130,10 +132,12 @@ export function RankingsPage() {
   const { data: rankings } = useAllRankings();
   const [globalFilter, setGlobalFilter] = useState("");
   const [sectorFilter, setSectorFilter] = useState<Sector | "all">("all");
+  const [countryFilter, setCountryFilter] = useState<string>("all");
   const [minValuationMetrics, setMinValuationMetrics] = useState(0);
   const [valueFilters, setValueFilters] = useState<ValueFilters>(EMPTY_VALUE_FILTERS);
+  const [formulaInput, setFormulaInput] = useState("");
   const [sorting, setSorting] = useState<SortingState>([{ id: "latest.overallRank", desc: false }]);
-  const [visibility, setVisibility] = useState<VisibilityState>({ industry: false, "latest.sharePrice": false });
+  const [visibility, setVisibility] = useState<VisibilityState>({ industry: false, "latest.sharePrice": false, country: false });
 
   function valuationMetricsAvailable(ticker: string): number {
     const valuationScore = rankings?.get(ticker)?.categoryScores.find((c) => c.category === "valuation");
@@ -141,6 +145,23 @@ export function RankingsPage() {
   }
 
   const activeValueFilterCount = Object.values(valueFilters).filter((v) => v !== "").length;
+
+  const countries = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of companies ?? []) {
+      if (c.country) set.add(c.country);
+    }
+    return [...set].sort();
+  }, [companies]);
+
+  const { formulaNode, formulaError } = useMemo(() => {
+    if (!formulaInput.trim()) return { formulaNode: null, formulaError: null };
+    try {
+      return { formulaNode: parseFormula(formulaInput), formulaError: null };
+    } catch (e) {
+      return { formulaNode: null, formulaError: e instanceof FormulaError ? e.message : "Invalid formula" };
+    }
+  }, [formulaInput]);
 
   const filteredData = useMemo(() => {
     const rows = companies ?? [];
@@ -153,6 +174,7 @@ export function RankingsPage() {
 
     return rows.filter((c) => {
       if (sectorFilter !== "all" && c.sector !== sectorFilter) return false;
+      if (countryFilter !== "all" && c.country !== countryFilter) return false;
       if (minValuationMetrics > 0 && valuationMetricsAvailable(c.ticker) < minValuationMetrics) return false;
 
       const marketCap = c.latest?.marketCap ?? null;
@@ -165,10 +187,24 @@ export function RankingsPage() {
       if (minDividendYield !== null && (headline?.dividendYield == null || headline.dividendYield < minDividendYield)) return false;
       if (minRoic !== null && (headline?.roic == null || headline.roic < minRoic)) return false;
 
+      if (formulaNode) {
+        const context: FormulaContext = {
+          marketcap: marketCap,
+          roic: headline?.roic ?? null,
+          pettm: headline?.peTtm ?? null,
+          evebitda: headline?.evEbitda ?? null,
+          dividendyield: headline?.dividendYield ?? null,
+          fcfyield: headline?.fcfYield ?? null,
+          revenuegrowth1y: headline?.revenueGrowth1y ?? null,
+          overallscore: c.latest?.overallScore ?? null,
+        };
+        if (!evaluateFormula(formulaNode, context)) return false;
+      }
+
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companies, sectorFilter, minValuationMetrics, rankings, valueFilters]);
+  }, [companies, sectorFilter, countryFilter, minValuationMetrics, rankings, valueFilters, formulaNode]);
 
   const tableColumns = useMemo(() => [...columns, buildValuationColumn(rankings)], [rankings]);
 
@@ -221,6 +257,7 @@ export function RankingsPage() {
       companyName: r.original.companyName,
       sector: r.original.sector,
       industry: r.original.industry,
+      country: r.original.country,
       marketCap: r.original.latest?.marketCap,
       sharePrice: r.original.latest?.sharePrice,
       peTtm: r.original.latest?.headlineMetrics?.peTtm,
@@ -272,6 +309,19 @@ export function RankingsPage() {
           {SECTORS.map((s) => (
             <option key={s} value={s}>
               {s}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={countryFilter}
+          onChange={(e) => setCountryFilter(e.target.value)}
+          className="h-8 rounded-md border border-border bg-surface px-2.5 text-sm"
+        >
+          <option value="all">All countries</option>
+          {countries.map((c) => (
+            <option key={c} value={c}>
+              {c}
             </option>
           ))}
         </select>
@@ -395,6 +445,30 @@ export function RankingsPage() {
             <Download className="h-4 w-4" /> JSON
           </Button>
         </div>
+      </div>
+
+      <div>
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder='Custom formula, e.g. "roic > 15% AND peTtm < 20 AND marketCap > 5B"'
+            value={formulaInput}
+            onChange={(e) => setFormulaInput(e.target.value)}
+            className="max-w-xl font-mono text-xs"
+          />
+          {formulaInput && (
+            <Button variant="ghost" size="sm" onClick={() => setFormulaInput("")}>
+              Clear
+            </Button>
+          )}
+        </div>
+        {formulaError ? (
+          <p className="mt-1 text-xs text-negative">{formulaError}</p>
+        ) : (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Fields: marketCap (use B/M suffix), roic, peTtm, evEbitda, dividendYield, fcfYield, revenueGrowth1y,
+            overallScore. Operators: &gt; &lt; &gt;= &lt;= == != AND OR NOT ( ).
+          </p>
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-card border border-border">

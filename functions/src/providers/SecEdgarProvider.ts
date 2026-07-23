@@ -1,6 +1,7 @@
 import type { BalanceSheet, CashFlowStatement, IncomeStatement } from "@proverbs/shared";
 import { FinancialDataProvider, type CompanyProfileResult, type ProviderCapabilities } from "./FinancialDataProvider.js";
 import { sectorFromSicCode } from "./sicSectorMap.js";
+import { resolveCountry } from "./usStateCodes.js";
 
 interface XbrlFact {
   end: string;
@@ -22,7 +23,9 @@ interface SubmissionJson {
   name?: string;
   sic?: string;
   sicDescription?: string;
-  addresses?: { business?: { stateOrCountry?: string } };
+  addresses?: {
+    business?: { stateOrCountry?: string; stateOrCountryDescription?: string };
+  };
 }
 
 export interface ApproxMarketValue {
@@ -279,6 +282,9 @@ export class SecEdgarProvider extends FinancialDataProvider {
 
   private buildProfile(ticker: string, cik: string, submission: SubmissionJson | null): CompanyProfileResult {
     const sicCode = submission?.sic ? Number.parseInt(submission.sic, 10) : null;
+    const address = submission?.addresses?.business;
+    const country = resolveCountry(address?.stateOrCountry, address?.stateOrCountryDescription);
+
     return {
       ticker: ticker.toUpperCase(),
       companyName: submission?.name ?? ticker.toUpperCase(),
@@ -287,7 +293,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
       industry: submission?.sicDescription ?? null,
       description: null,
       website: null,
-      country: submission?.addresses?.business?.stateOrCountry ?? null,
+      country,
     };
   }
 
