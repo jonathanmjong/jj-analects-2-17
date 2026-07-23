@@ -59,18 +59,29 @@ export async function ingestPriceForTicker(ticker: string): Promise<{ ok: boolea
   }
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Yahoo's unofficial chart endpoint tolerates single sequential requests
+ * reliably but starts silently failing (returns no meta / empty body rather
+ * than an HTTP error, so nothing gets logged) under even modest concurrency
+ * — a burst of 10 parallel requests dropped ~96% of quotes in production.
+ * One request at a time with a real gap between them, plus one retry on a
+ * null quote, trades a slower total run for actually getting the data.
+ */
 export async function ingestPricesForUniverse(tickers: string[]) {
   const succeeded: string[] = [];
   const failed: Array<{ ticker: string; error: string }> = [];
-  const CHUNK = 10;
-  for (let i = 0; i < tickers.length; i += CHUNK) {
-    const chunk = tickers.slice(i, i + CHUNK);
-    const results = await Promise.all(chunk.map((t) => ingestPriceForTicker(t).then((r) => ({ t, r }))));
-    for (const { t, r } of results) {
-      if (r.ok) succeeded.push(t);
-      else failed.push({ ticker: t, error: r.error ?? "unknown error" });
+
+  for (const ticker of tickers) {
+    let result = await ingestPriceForTicker(ticker);
+    if (!result.ok) {
+      await sleep(800);
+      result = await ingestPriceForTicker(ticker);
     }
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    if (result.ok) succeeded.push(ticker);
+    else failed.push({ ticker, error: result.error ?? "unknown error" });
+    await sleep(350);
   }
   return { succeeded, failed };
 }
