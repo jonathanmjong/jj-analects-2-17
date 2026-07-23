@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   flexRender,
   getCoreRowModel,
@@ -55,7 +55,11 @@ const columns: ColumnDef<Company>[] = [
     accessorKey: "ticker",
     header: "Ticker",
     cell: ({ row }) => (
-      <Link to={`/company/${row.original.ticker}`} className="font-medium hover:text-accent">
+      <Link
+        to={`/company/${row.original.ticker}`}
+        onClick={(e) => e.stopPropagation()}
+        className="font-medium hover:text-accent"
+      >
         {row.original.ticker}
       </Link>
     ),
@@ -112,6 +116,7 @@ function buildValuationColumn(rankings: Map<string, import("@proverbs/shared").R
 }
 
 export function RankingsPage() {
+  const navigate = useNavigate();
   const { data: companies, isLoading } = useCompaniesList({ limitTo: 5000 });
   const { data: rankings } = useAllRankings();
   const [globalFilter, setGlobalFilter] = useState("");
@@ -374,7 +379,11 @@ export function RankingsPage() {
               </tr>
             )}
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="border-b border-border last:border-b-0 hover:bg-surface-hover">
+              <tr
+                key={row.id}
+                onClick={() => navigate(`/company/${row.original.ticker}`)}
+                className="cursor-pointer border-b border-border last:border-b-0 hover:bg-surface-hover"
+              >
                 {row.getVisibleCells().map((cell) => (
                   <td key={cell.id} className="whitespace-nowrap px-3 py-2">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}

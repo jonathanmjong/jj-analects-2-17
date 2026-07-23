@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type { Sector } from "@proverbs/shared";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { ScorePill } from "../components/ui/ScorePill";
@@ -6,6 +6,7 @@ import { Badge } from "../components/ui/Badge";
 import { formatCurrency } from "../lib/utils";
 
 export function SectorDetailPage() {
+  const navigate = useNavigate();
   const { sector } = useParams<{ sector: string }>();
   const { data: companies, isLoading } = useCompaniesList({ sector: sector as Sector, limitTo: 5000 });
 
@@ -43,10 +44,18 @@ export function SectorDetailPage() {
               </tr>
             )}
             {ranked.map((c, idx) => (
-              <tr key={c.ticker} className="border-b border-border last:border-b-0 hover:bg-surface-hover">
+              <tr
+                key={c.ticker}
+                onClick={() => navigate(`/company/${c.ticker}`)}
+                className="cursor-pointer border-b border-border last:border-b-0 hover:bg-surface-hover"
+              >
                 <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
                 <td className="px-3 py-2">
-                  <Link to={`/company/${c.ticker}`} className="font-medium hover:text-accent">
+                  <Link
+                    to={`/company/${c.ticker}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="font-medium hover:text-accent"
+                  >
                     {c.ticker}
                   </Link>
                   <div className="text-xs text-muted-foreground">{c.companyName}</div>

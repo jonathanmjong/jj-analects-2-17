@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { useCustomRankings } from "../hooks/useCustomRankings";
 import { Card, CardContent } from "../components/ui/Card";
@@ -9,6 +9,7 @@ import { Slider } from "../components/ui/Slider";
 import { formatCurrency } from "../lib/utils";
 
 export function HomePage() {
+  const navigate = useNavigate();
   const { data: companies, isLoading } = useCompaniesList({ limitTo: 100 });
   const { results, loading: recomputing, setYearsIncluded, recompute } = useCustomRankings();
   const [years, setYears] = useState(5);
@@ -99,10 +100,18 @@ export function HomePage() {
               </tr>
             )}
             {rows.map((row) => (
-              <tr key={row.ticker} className="border-b border-border last:border-b-0 hover:bg-surface-hover">
+              <tr
+                key={row.ticker}
+                onClick={() => navigate(`/company/${row.ticker}`)}
+                className="cursor-pointer border-b border-border last:border-b-0 hover:bg-surface-hover"
+              >
                 <td className="px-3 py-2 text-muted-foreground">{row.overallRank ?? "—"}</td>
                 <td className="px-3 py-2">
-                  <Link to={`/company/${row.ticker}`} className="font-medium hover:text-accent">
+                  <Link
+                    to={`/company/${row.ticker}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="font-medium hover:text-accent"
+                  >
                     {row.ticker}
                   </Link>
                   <div className="text-xs text-muted-foreground">{row.companyName}</div>
