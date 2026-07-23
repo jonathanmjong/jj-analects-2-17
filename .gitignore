@@ -1,7 +1,8 @@
 node_modules/
 dist/
 build/
-lib/
+/functions/lib/
+/shared/dist/
 .env
 .env.local
 *.local
