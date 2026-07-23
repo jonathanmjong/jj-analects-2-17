@@ -16,3 +16,4 @@ pubsub-debug.log
 coverage/
 playwright-report/
 test-results/
+.claude/

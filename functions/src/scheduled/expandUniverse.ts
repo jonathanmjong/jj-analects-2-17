@@ -78,6 +78,17 @@ export const expandUniverse = onSchedule(
     const state = await claimLock(allTickers.length);
     if (!state) return; // complete, or another invocation is already running this batch
 
+    // Many tickers in SEC's list share a CIK — dual-class common stock,
+    // preferred stock series, etc. Track CIKs already represented in the
+    // universe so a company is counted once, under a single ticker, not
+    // once per share class/series.
+    const existingCiks = new Set<string>();
+    const existingSnap = await collections.companies().select("cik").get();
+    for (const doc of existingSnap.docs) {
+      const cik = doc.get("cik") as string | null;
+      if (cik) existingCiks.add(cik);
+    }
+
     const batch = allTickers.slice(state.cursor, state.cursor + BATCH_SIZE);
     const succeeded: string[] = [];
     const failed: Array<{ ticker: string; error: string }> = [];
@@ -89,10 +100,19 @@ export const expandUniverse = onSchedule(
         wave.map(async (ticker) => {
           try {
             const approx = await secEdgar.getApproxMarketValue(ticker);
-            if (!approx || approx.publicFloat < MID_CAP_FLOOR) {
-              succeeded.push(ticker); // successfully screened (just didn't qualify)
+            if (!approx || approx.publicFloat < MID_CAP_FLOOR || !approx.hasOperatingFinancials) {
+              succeeded.push(ticker); // successfully screened (didn't qualify, or isn't an operating company)
               return;
             }
+            // Synchronous check-then-reserve (no await in between) so two
+            // same-CIK tickers landing in the same concurrent wave can't
+            // both slip past this gate.
+            if (existingCiks.has(approx.cik)) {
+              succeeded.push(ticker); // duplicate share class/series of an already-qualified company
+              return;
+            }
+            existingCiks.add(approx.cik);
+
             const result = await ingestFundamentalsForTicker(ticker);
             if (!result.ok) {
               failed.push({ ticker, error: result.error ?? "ingestion failed after qualifying" });

@@ -26,11 +26,14 @@ interface SubmissionJson {
 }
 
 export interface ApproxMarketValue {
+  cik: string;
   /** Aggregate market value of common equity held by non-affiliates, as reported on the most recent 10-K cover page. */
   publicFloat: number;
   sharesOutstanding: number | null;
   /** Filing cover-page date the figures are "as of" — this is NOT a live/current price. */
   asOfDate: string;
+  /** True if the filer reports actual Revenues/NetIncomeLoss — excludes ETFs, trusts, and other non-operating entities that still file EntityPublicFloat. */
+  hasOperatingFinancials: boolean;
 }
 
 export interface SecCompanyBundle {
@@ -240,7 +243,15 @@ export class SecEdgarProvider extends FinancialDataProvider {
     });
   }
 
-  private extractApproxMarketValue(facts: CompanyFacts | null): ApproxMarketValue | null {
+  /** True for actual operating companies; false for ETFs/trusts/funds that file EntityPublicFloat but don't report standard operating financials. */
+  private hasOperatingFinancials(facts: CompanyFacts | null): boolean {
+    const tags = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "NetIncomeLoss"];
+    return tags.some((tag) =>
+      (facts?.facts?.["us-gaap"]?.[tag]?.units?.USD ?? []).some((f) => f.form === "10-K"),
+    );
+  }
+
+  private extractApproxMarketValue(cik: string, facts: CompanyFacts | null): ApproxMarketValue | null {
     const floatFacts = facts?.facts?.dei?.EntityPublicFloat?.units?.USD ?? [];
     const latestFloat = floatFacts.filter((f) => f.form === "10-K").sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
     if (!latestFloat) return null;
@@ -249,9 +260,11 @@ export class SecEdgarProvider extends FinancialDataProvider {
     const latestShares = sharesFacts.filter((f) => f.form === "10-K").sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
 
     return {
+      cik,
       publicFloat: latestFloat.val,
       sharesOutstanding: latestShares?.val ?? null,
       asOfDate: latestFloat.end,
+      hasOperatingFinancials: this.hasOperatingFinancials(facts),
     };
   }
 
@@ -282,7 +295,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
   async getApproxMarketValue(ticker: string): Promise<ApproxMarketValue | null> {
     const cik = await this.cikFor(ticker);
     if (!cik) return null;
-    return this.extractApproxMarketValue(await this.fetchCompanyFacts(cik));
+    return this.extractApproxMarketValue(cik, await this.fetchCompanyFacts(cik));
   }
 
   async getCompanyProfile(ticker: string): Promise<CompanyProfileResult | null> {
@@ -324,7 +337,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
       income: this.extractIncomeStatements(facts, periods),
       balance: this.extractBalanceSheets(facts, periods),
       cashFlow: this.extractCashFlowStatements(facts, periods),
-      approxMarketValue: this.extractApproxMarketValue(facts),
+      approxMarketValue: this.extractApproxMarketValue(cik, facts),
     };
   }
 
