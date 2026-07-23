@@ -19,7 +19,7 @@ export function useCompaniesList(filters: CompanyListFilters = {}) {
       if (filters.isSp500 !== undefined) constraints.push(where("isSp500", "==", filters.isSp500));
       if (filters.marketCapTier) constraints.push(where("marketCapTier", "==", filters.marketCapTier));
       constraints.push(orderBy("latest.overallScore", "desc"));
-      constraints.push(fbLimit(filters.limitTo ?? 500));
+      constraints.push(fbLimit(filters.limitTo ?? 5000));
 
       const snap = await getDocs(query(collection(db, "companies"), ...constraints));
       return snap.docs.map((d) => d.data() as Company);

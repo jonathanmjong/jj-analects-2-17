@@ -5,7 +5,7 @@ import { Card, CardContent } from "../components/ui/Card";
 import { ScorePill } from "../components/ui/ScorePill";
 
 export function SectorsOverviewPage() {
-  const { data: companies, isLoading } = useCompaniesList({ limitTo: 500 });
+  const { data: companies, isLoading } = useCompaniesList({ limitTo: 5000 });
 
   const bySector = SECTORS.map((sector) => {
     const members = (companies ?? []).filter((c) => c.sector === sector);

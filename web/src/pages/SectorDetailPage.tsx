@@ -7,7 +7,7 @@ import { formatCurrency } from "../lib/utils";
 
 export function SectorDetailPage() {
   const { sector } = useParams<{ sector: string }>();
-  const { data: companies, isLoading } = useCompaniesList({ sector: sector as Sector, limitTo: 500 });
+  const { data: companies, isLoading } = useCompaniesList({ sector: sector as Sector, limitTo: 5000 });
 
   const ranked = (companies ?? []).slice().sort(
     (a, b) => (b.latest?.overallScore ?? -Infinity) - (a.latest?.overallScore ?? -Infinity),

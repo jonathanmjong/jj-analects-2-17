@@ -28,7 +28,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 export function CompanyPage() {
   const { ticker = "" } = useParams<{ ticker: string }>();
   const { data, isLoading } = useCompanyDetail(ticker);
-  const { data: peers } = useCompaniesList({ sector: data?.company.sector ?? undefined, limitTo: 500 });
+  const { data: peers } = useCompaniesList({ sector: data?.company.sector ?? undefined, limitTo: 5000 });
   const { results, loading: recomputing, setYearsIncluded, recompute } = useCustomRankings();
   const { data: metricDefinitions } = useMetricDefinitions();
   const [years, setYears] = useState(5);

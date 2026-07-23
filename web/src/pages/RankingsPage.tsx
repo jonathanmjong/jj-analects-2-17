@@ -112,7 +112,7 @@ function buildValuationColumn(rankings: Map<string, import("@proverbs/shared").R
 }
 
 export function RankingsPage() {
-  const { data: companies, isLoading } = useCompaniesList({ limitTo: 500 });
+  const { data: companies, isLoading } = useCompaniesList({ limitTo: 5000 });
   const { data: rankings } = useAllRankings();
   const [globalFilter, setGlobalFilter] = useState("");
   const [sectorFilter, setSectorFilter] = useState<Sector | "all">("all");
