@@ -37,6 +37,8 @@ export interface ApproxMarketValue {
   asOfDate: string;
   /** True if the filer reports actual Revenues/NetIncomeLoss — excludes ETFs, trusts, and other non-operating entities that still file EntityPublicFloat. */
   hasOperatingFinancials: boolean;
+  /** Most recent annual Revenues figure, if reported — used for a market-cap-to-revenue plausibility check. */
+  latestRevenue: number | null;
 }
 
 export interface SecCompanyBundle {
@@ -263,6 +265,16 @@ export class SecEdgarProvider extends FinancialDataProvider {
     );
   }
 
+  private latestRevenue(facts: CompanyFacts | null): number | null {
+    const tags = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"];
+    for (const tag of tags) {
+      const facts10k = (facts?.facts?.["us-gaap"]?.[tag]?.units?.USD ?? []).filter((f) => f.form === "10-K");
+      const latest = facts10k.sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
+      if (latest) return latest.val;
+    }
+    return null;
+  }
+
   private extractApproxMarketValue(cik: string, facts: CompanyFacts | null): ApproxMarketValue | null {
     const floatFacts = facts?.facts?.dei?.EntityPublicFloat?.units?.USD ?? [];
     const latestFloat = floatFacts.filter((f) => f.form === "10-K").sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
@@ -277,6 +289,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
       sharesOutstanding: latestShares?.val ?? null,
       asOfDate: latestFloat.end,
       hasOperatingFinancials: this.hasOperatingFinancials(facts),
+      latestRevenue: this.latestRevenue(facts),
     };
   }
 

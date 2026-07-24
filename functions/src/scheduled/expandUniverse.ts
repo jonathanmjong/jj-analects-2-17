@@ -3,6 +3,7 @@ import { db, collections, FieldValue } from "../lib/firestore.js";
 import { log } from "../lib/logger.js";
 import { SecEdgarProvider } from "../providers/SecEdgarProvider.js";
 import { ingestFundamentalsForTicker, logRefresh } from "../ingestion/ingestFundamentals.js";
+import { isPlausibleMarketCap } from "../ingestion/ingestPrices.js";
 
 const secEdgar = new SecEdgarProvider();
 
@@ -100,8 +101,13 @@ export const expandUniverse = onSchedule(
         wave.map(async (ticker) => {
           try {
             const approx = await secEdgar.getApproxMarketValue(ticker);
-            if (!approx || approx.publicFloat < MID_CAP_FLOOR || !approx.hasOperatingFinancials) {
-              succeeded.push(ticker); // successfully screened (didn't qualify, or isn't an operating company)
+            if (
+              !approx ||
+              approx.publicFloat < MID_CAP_FLOOR ||
+              !isPlausibleMarketCap(approx.publicFloat, approx.latestRevenue) ||
+              !approx.hasOperatingFinancials
+            ) {
+              succeeded.push(ticker); // screened successfully (didn't qualify, isn't an operating company, or the filer's own XBRL data is implausible)
               return;
             }
             // Synchronous check-then-reserve (no await in between) so two
