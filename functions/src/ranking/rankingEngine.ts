@@ -225,7 +225,11 @@ async function persistMetricPercentiles(
     }
   }
 
-  const batchSize = 400;
+  // Each doc here carries ~70 metrics' worth of {percentile, rankAmongPeers,
+  // peerCount}, much chunkier than persistRankings' small per-ticker
+  // summaries — 400/batch tripped Firestore's "Transaction too big" limit
+  // in production, so this uses a much smaller batch size.
+  const batchSize = 75;
   for (let i = 0; i < writes.length; i += batchSize) {
     const batch = db.batch();
     for (const w of writes.slice(i, i + batchSize)) {
