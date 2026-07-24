@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   flexRender,
@@ -16,6 +16,8 @@ import type { Company, Sector } from "@proverbs/shared";
 import { SECTORS } from "@proverbs/shared";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { useAllRankings } from "../hooks/useAllRankings";
+import { useCustomRankings } from "../hooks/useCustomRankings";
+import { useMetricDefinitions } from "../hooks/useMetricDefinitions";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { Slider } from "../components/ui/Slider";
@@ -130,6 +132,10 @@ export function RankingsPage() {
   const navigate = useNavigate();
   const { data: companies, isLoading } = useCompaniesList({ limitTo: 5000 });
   const { data: rankings } = useAllRankings();
+  const { data: metricDefinitions } = useMetricDefinitions();
+  const { results: customResults, loading: recomputing, setMetricWeight, resetMetricWeights, recompute, config: customConfig } = useCustomRankings();
+  const [metricWeightInputs, setMetricWeightInputs] = useState<Record<string, number>>({});
+  const recomputeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [globalFilter, setGlobalFilter] = useState("");
   const [sectorFilter, setSectorFilter] = useState<Sector | "all">("all");
   const [countryFilter, setCountryFilter] = useState<string>("all");
@@ -153,6 +159,42 @@ export function RankingsPage() {
     }
     return [...set].sort();
   }, [companies]);
+
+  const valuationMetrics = useMemo(
+    () => (metricDefinitions ?? []).filter((m) => m.category === "valuation"),
+    [metricDefinitions],
+  );
+
+  function weightFor(metricKey: string): number {
+    return metricWeightInputs[metricKey] ?? 1;
+  }
+
+  function handleMetricWeightChange(metricKey: string, weight: number) {
+    setMetricWeightInputs((prev) => ({ ...prev, [metricKey]: weight }));
+    const nextConfig = setMetricWeight(metricKey, weight);
+    if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
+    recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 350);
+  }
+
+  function handleResetMetricWeights() {
+    setMetricWeightInputs({});
+    const nextConfig = resetMetricWeights();
+    if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
+    void recompute(nextConfig);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
+    };
+  }, []);
+
+  const customOverrideByTicker = useMemo(() => {
+    if (!customResults) return null;
+    return new Map(customResults.map((r) => [r.ticker, r]));
+  }, [customResults]);
+
+  const metricWeightsActive = Object.keys(customConfig.metricWeights ?? {}).length > 0;
 
   const { formulaNode, formulaError } = useMemo(() => {
     if (!formulaInput.trim()) return { formulaNode: null, formulaError: null };
@@ -206,6 +248,18 @@ export function RankingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companies, sectorFilter, countryFilter, minValuationMetrics, rankings, valueFilters, formulaNode]);
 
+  const displayData = useMemo(() => {
+    if (!customOverrideByTicker) return filteredData;
+    return filteredData.map((c) => {
+      const override = customOverrideByTicker.get(c.ticker);
+      if (!override || !c.latest) return c;
+      return {
+        ...c,
+        latest: { ...c.latest, overallScore: override.overallScore, overallRank: override.overallRank },
+      };
+    });
+  }, [filteredData, customOverrideByTicker]);
+
   const tableColumns = useMemo(() => [...columns, buildValuationColumn(rankings)], [rankings]);
 
   const scatterData = useMemo<ScatterDatum[]>(() => {
@@ -230,7 +284,7 @@ export function RankingsPage() {
   }, [filteredData]);
 
   const table = useReactTable({
-    data: filteredData,
+    data: displayData,
     columns: tableColumns,
     state: { sorting, globalFilter, columnVisibility: visibility },
     onSortingChange: setSorting,
@@ -408,6 +462,47 @@ export function RankingsPage() {
               {activeValueFilterCount > 0 && (
                 <Button variant="ghost" size="sm" className="w-full" onClick={() => setValueFilters(EMPTY_VALUE_FILTERS)}>
                   Clear value filters
+                </Button>
+              )}
+            </div>
+          </details>
+        </div>
+
+        <div className="relative">
+          <details className="group">
+            <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-sm">
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Valuation weights
+              {metricWeightsActive && (
+                <span className="rounded-full bg-accent px-1.5 text-[11px] text-accent-foreground">on</span>
+              )}
+              {recomputing && <span className="text-[11px] text-muted-foreground">recomputing…</span>}
+            </summary>
+            <div className="absolute z-10 mt-2 w-72 space-y-2 rounded-md border border-border bg-surface p-3 shadow-sm">
+              <p className="text-xs text-muted-foreground">
+                Weight each valuation metric's contribution to the Valuation category score (0 = excluded, 100% =
+                default, up to 200% = double weight). Overall score and rank update live for the whole universe.
+              </p>
+              {valuationMetrics.length === 0 && <p className="text-xs text-muted-foreground">Loading metrics…</p>}
+              {valuationMetrics.map((metric) => (
+                <label key={metric.key} className="block text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between">
+                    <span>{metric.label}</span>
+                    <span>{Math.round(weightFor(metric.key) * 100)}%</span>
+                  </div>
+                  <Slider
+                    min={0}
+                    max={2}
+                    step={0.1}
+                    value={weightFor(metric.key)}
+                    onChange={(e) => handleMetricWeightChange(metric.key, Number(e.target.value))}
+                    className="mt-1"
+                  />
+                </label>
+              ))}
+              {metricWeightsActive && (
+                <Button variant="ghost" size="sm" className="w-full" onClick={handleResetMetricWeights}>
+                  Reset valuation weights
                 </Button>
               )}
             </div>

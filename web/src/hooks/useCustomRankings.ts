@@ -45,5 +45,28 @@ export function useCustomRankings() {
     return next;
   }
 
-  return { config, setConfig, results, loading, error, recompute, setYearsIncluded, setCategoryWeight };
+  function setMetricWeight(metricKey: string, weight: number) {
+    const next = { ...config, metricWeights: { ...config.metricWeights, [metricKey]: weight } };
+    setConfig(next);
+    return next;
+  }
+
+  function resetMetricWeights() {
+    const next = { ...config, metricWeights: undefined };
+    setConfig(next);
+    return next;
+  }
+
+  return {
+    config,
+    setConfig,
+    results,
+    loading,
+    error,
+    recompute,
+    setYearsIncluded,
+    setCategoryWeight,
+    setMetricWeight,
+    resetMetricWeights,
+  };
 }

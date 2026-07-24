@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { percentileRanks, winsorize, zscores } from "../src/ranking/normalize.js";
+import { percentileRanks, weightedAverage, winsorize, zscores } from "../src/ranking/normalize.js";
 
 describe("winsorize", () => {
   it("clamps extreme values to the configured percentile bounds", () => {
@@ -41,5 +41,30 @@ describe("zscores", () => {
 
   it("returns all zeros when standard deviation is zero", () => {
     expect(zscores([5, 5, 5])).toEqual([0, 0, 0]);
+  });
+});
+
+describe("weightedAverage", () => {
+  it("computes a plain average when all weights are equal", () => {
+    expect(weightedAverage([{ score: 0.2, weight: 1 }, { score: 0.8, weight: 1 }])).toBeCloseTo(0.5, 5);
+  });
+
+  it("renormalizes over whatever weights are present, never treating a missing entry as zero", () => {
+    // year weights 35/25/20/10/10 renormalized over just the first two (35/25 -> 58.3%/41.7%)
+    const result = weightedAverage([
+      { score: 1, weight: 0.35 },
+      { score: 0, weight: 0.25 },
+    ]);
+    expect(result).toBeCloseTo(0.35 / 0.6, 5);
+  });
+
+  it("lets a higher relative weight dominate the result", () => {
+    const result = weightedAverage([{ score: 1, weight: 3 }, { score: 0, weight: 1 }]);
+    expect(result).toBeCloseTo(0.75, 5);
+  });
+
+  it("returns null for empty input or when every weight is non-positive", () => {
+    expect(weightedAverage([])).toBeNull();
+    expect(weightedAverage([{ score: 1, weight: 0 }])).toBeNull();
   });
 });

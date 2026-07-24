@@ -33,3 +33,17 @@ export function zscores(values: number[]): number[] {
 export function zscoreToUnitScore(z: number): number {
   return 1 / (1 + Math.exp(-z)); // logistic squashing, keeps outliers from dominating after winsorization
 }
+
+/**
+ * Weighted average of (score, weight) pairs, renormalizing over whichever
+ * weights are actually present so a subset of missing/excluded entries
+ * never gets treated as zero. Used both for year-weighting (35/25/20/10/10
+ * across a metric's trailing fiscal years) and metric-weighting (a
+ * category's metrics, equal by default or user-customized). Returns null
+ * for an empty input or when every weight is non-positive.
+ */
+export function weightedAverage(entries: Array<{ score: number; weight: number }>): number | null {
+  const weightSum = entries.reduce((acc, e) => acc + e.weight, 0);
+  if (weightSum <= 0) return null;
+  return entries.reduce((acc, e) => acc + (e.weight / weightSum) * e.score, 0);
+}

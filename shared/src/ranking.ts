@@ -8,6 +8,14 @@ export interface RankingWeightsConfig {
   winsorizeUpperPct: number;
   /** How many of the trailing years (1-5) to include in each metric's multi-year score. */
   yearsIncluded: 1 | 2 | 3 | 4 | 5;
+  /**
+   * Optional per-metric weight overrides (metric key -> relative weight,
+   * any non-negative number — they're renormalized against each other, not
+   * required to sum to 1). Metrics in a category with no entry here default
+   * to weight 1 (equal weighting), matching the original behavior. A weight
+   * of 0 excludes that metric from its category score entirely.
+   */
+  metricWeights?: Record<string, number>;
 }
 
 export interface CategoryScore {

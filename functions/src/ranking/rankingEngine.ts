@@ -2,7 +2,7 @@ import type { CategoryScore, HeadlineMetrics, MetricCategory, RankingResult, Ran
 import { DEFAULT_RANKING_CONFIG, DEFAULT_YEAR_WEIGHTS, METRIC_CATEGORIES } from "@proverbs/shared";
 import { collections, db } from "../lib/firestore.js";
 import { METRIC_DEFINITIONS } from "../metrics/definitions.js";
-import { percentileRanks, winsorize, zscoreToUnitScore, zscores } from "./normalize.js";
+import { percentileRanks, weightedAverage, winsorize, zscoreToUnitScore, zscores } from "./normalize.js";
 
 interface CompanyYearScores {
   ticker: string;
@@ -116,10 +116,19 @@ export async function computeRankings(
   const results: RankingResult[] = universe.map(({ ticker, byYear }) => {
     const categoryScores: CategoryScore[] = METRIC_CATEGORIES.map((category) => {
       const metricsInCategory = enabledMetrics.filter((m) => m.category === category);
-      const metricScoresForCompany: number[] = [];
+      // (multi-year score, user-configurable relative weight) per metric that has data — a
+      // weight of 0 (explicitly set via config.metricWeights) excludes the metric entirely,
+      // same as if it were missing.
+      const metricScoresForCompany: Array<{ score: number; weight: number }> = [];
       let missingCount = 0;
 
       for (const metric of metricsInCategory) {
+        const metricWeight = config.metricWeights?.[metric.key] ?? 1;
+        if (metricWeight <= 0) {
+          missingCount++;
+          continue;
+        }
+
         const perYear = metricUnitScores.get(metric.key);
         if (!perYear) {
           missingCount++;
@@ -135,18 +144,15 @@ export async function computeRankings(
           missingCount++;
           continue;
         }
-        const weightSum = availableYearScores.reduce((a, b) => a + b.weight, 0);
-        const multiYearScore =
-          weightSum > 0
-            ? availableYearScores.reduce((acc, y) => acc + (y.weight / weightSum) * y.score, 0)
-            : availableYearScores.reduce((acc, y) => acc + y.score, 0) / availableYearScores.length;
-        metricScoresForCompany.push(multiYearScore);
+        const multiYearScore = weightedAverage(availableYearScores);
+        if (multiYearScore === null) {
+          missingCount++;
+          continue;
+        }
+        metricScoresForCompany.push({ score: multiYearScore, weight: metricWeight });
       }
 
-      const categoryScore =
-        metricScoresForCompany.length > 0
-          ? metricScoresForCompany.reduce((a, b) => a + b, 0) / metricScoresForCompany.length
-          : null;
+      const categoryScore = weightedAverage(metricScoresForCompany);
 
       return {
         category,
@@ -158,11 +164,10 @@ export async function computeRankings(
     });
 
     const availableCategories = categoryScores.filter((c) => c.score !== null && c.weight > 0);
-    const weightSum = availableCategories.reduce((a, c) => a + c.weight, 0);
-    const overallScore =
-      weightSum > 0
-        ? availableCategories.reduce((acc, c) => acc + ((c.weight / weightSum) * (c.score as number)), 0) * 100
-        : null;
+    const categoryAverage = weightedAverage(
+      availableCategories.map((c) => ({ score: c.score as number, weight: c.weight })),
+    );
+    const overallScore = categoryAverage !== null ? categoryAverage * 100 : null;
 
     return {
       ticker,
