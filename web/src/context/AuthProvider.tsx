@@ -41,16 +41,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Tracks the signed-in uid across callback invocations so we can tell a
+    // genuine sign-in/sign-out apart from a routine background token refresh
+    // (onIdTokenChanged fires for both, roughly hourly for an active session).
+    let previousUid: string | null = null;
+
     const unsubscribe = onIdTokenChanged(auth, async (nextUser) => {
-      setUser(nextUser);
-      if (nextUser) {
-        await ensureUserDocument(nextUser);
-        const token = await nextUser.getIdTokenResult();
-        setSubscribed(token.claims.subscribed === true);
-      } else {
+      const identityChanged = (nextUser?.uid ?? null) !== previousUid;
+      previousUid = nextUser?.uid ?? null;
+
+      // Only show the loading spinner for an actual sign-in/sign-out transition.
+      // Setting user and subscribed together (instead of user first, subscribed
+      // after an await) avoids RequireSubscription briefly seeing a signed-in
+      // user with the *previous* (default-false) subscribed value and bouncing
+      // an already-subscribed user to /billing right after they sign in.
+      if (identityChanged) setLoading(true);
+      try {
+        if (nextUser) {
+          await ensureUserDocument(nextUser);
+          const token = await nextUser.getIdTokenResult();
+          setUser(nextUser);
+          setSubscribed(token.claims.subscribed === true);
+        } else {
+          setUser(null);
+          setSubscribed(false);
+        }
+      } catch (err) {
+        console.error("Failed to resolve auth/subscription state", err);
+        setUser(nextUser);
         setSubscribed(false);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return unsubscribe;
   }, []);
