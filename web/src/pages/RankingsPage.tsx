@@ -154,6 +154,7 @@ export function RankingsPage() {
   const {
     results: customResults,
     loading: recomputing,
+    error: recomputeError,
     setMetricWeight,
     resetMetricWeights,
     setCategoryWeight,
@@ -166,8 +167,27 @@ export function RankingsPage() {
   const [metricWeightInputs, setMetricWeightInputs] = useState<Record<string, number>>({});
   const recomputeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [globalFilter, setGlobalFilter] = useState("");
-  const [sectorFilter, setSectorFilter] = useState<Sector | "all">("all");
-  const [countryFilter, setCountryFilter] = useState<string>("all");
+  /** Empty set means "no filter" (all sectors/countries shown), matching the old "all" option. */
+  const [sectorFilter, setSectorFilter] = useState<Set<Sector>>(new Set());
+  const [countryFilter, setCountryFilter] = useState<Set<string>>(new Set());
+
+  function toggleSector(sector: Sector) {
+    setSectorFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(sector)) next.delete(sector);
+      else next.add(sector);
+      return next;
+    });
+  }
+
+  function toggleCountry(country: string) {
+    setCountryFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(country)) next.delete(country);
+      else next.add(country);
+      return next;
+    });
+  }
   const [minCategoryWeightMetrics, setMinCategoryWeightMetrics] = useState(0);
   const [valueFilters, setValueFilters] = useState<ValueFilters>(EMPTY_VALUE_FILTERS);
   const [formulaInput, setFormulaInput] = useState("");
@@ -184,6 +204,19 @@ export function RankingsPage() {
     () => (metricDefinitions ?? []).filter((m) => activeCategories.includes(m.category)).length,
     [metricDefinitions, activeCategories],
   );
+
+  // Default the "min. category weight data" slider to 60% (rounded up) of
+  // the denominator once metric definitions have loaded — can't compute this
+  // until then since the denominator is 0 pre-load. Only applies the default
+  // once; later changes (by the user, or from adjusting category weights)
+  // never get silently overridden.
+  const hasSetDefaultMinRef = useRef(false);
+  useEffect(() => {
+    if (!hasSetDefaultMinRef.current && activeCategoryMetricCount > 0) {
+      hasSetDefaultMinRef.current = true;
+      setMinCategoryWeightMetrics(Math.ceil(activeCategoryMetricCount * 0.6));
+    }
+  }, [activeCategoryMetricCount]);
 
   function categoryWeightDataAvailable(ticker: string): number {
     const scores = rankings?.get(ticker)?.categoryScores ?? [];
@@ -281,8 +314,8 @@ export function RankingsPage() {
     const minRoic = valueFilters.minRoicPct ? Number(valueFilters.minRoicPct) / 100 : null;
 
     return rows.filter((c) => {
-      if (sectorFilter !== "all" && c.sector !== sectorFilter) return false;
-      if (countryFilter !== "all" && c.country !== countryFilter) return false;
+      if (sectorFilter.size > 0 && (!c.sector || !sectorFilter.has(c.sector))) return false;
+      if (countryFilter.size > 0 && (!c.country || !countryFilter.has(c.country))) return false;
       if (minCategoryWeightMetrics > 0 && categoryWeightDataAvailable(c.ticker) < minCategoryWeightMetrics) return false;
 
       const marketCap = c.latest?.marketCap ?? null;
@@ -416,6 +449,13 @@ export function RankingsPage() {
         </Card>
       )}
 
+      {recomputeError && (
+        <div className="rounded-md border border-negative/30 bg-negative/10 px-3 py-2 text-sm text-negative">
+          Failed to recompute rankings with your custom weights: {recomputeError} — showing the last known
+          scores/ranks instead.
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
         <Input
           placeholder="Search ticker or company…"
@@ -423,31 +463,47 @@ export function RankingsPage() {
           onChange={(e) => setGlobalFilter(e.target.value)}
           className="max-w-xs"
         />
-        <select
-          value={sectorFilter}
-          onChange={(e) => setSectorFilter(e.target.value as Sector | "all")}
-          className="h-8 rounded-md border border-border bg-surface px-2.5 text-sm"
-        >
-          <option value="all">All sectors</option>
-          {SECTORS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <div className="relative">
+          <details className="group">
+            <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-sm">
+              {sectorFilter.size === 0 ? "All sectors" : `Sectors (${sectorFilter.size})`}
+            </summary>
+            <div className="absolute z-10 mt-2 max-h-72 w-56 space-y-1 overflow-y-auto rounded-md border border-border bg-surface p-3 shadow-sm">
+              {SECTORS.map((s) => (
+                <label key={s} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={sectorFilter.has(s)} onChange={() => toggleSector(s)} />
+                  {s}
+                </label>
+              ))}
+              {sectorFilter.size > 0 && (
+                <Button variant="ghost" size="sm" className="w-full" onClick={() => setSectorFilter(new Set())}>
+                  Clear sectors
+                </Button>
+              )}
+            </div>
+          </details>
+        </div>
 
-        <select
-          value={countryFilter}
-          onChange={(e) => setCountryFilter(e.target.value)}
-          className="h-8 rounded-md border border-border bg-surface px-2.5 text-sm"
-        >
-          <option value="all">All countries</option>
-          {countries.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        <div className="relative">
+          <details className="group">
+            <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-sm">
+              {countryFilter.size === 0 ? "All countries" : `Countries (${countryFilter.size})`}
+            </summary>
+            <div className="absolute z-10 mt-2 max-h-72 w-56 space-y-1 overflow-y-auto rounded-md border border-border bg-surface p-3 shadow-sm">
+              {countries.map((c) => (
+                <label key={c} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={countryFilter.has(c)} onChange={() => toggleCountry(c)} />
+                  {c}
+                </label>
+              ))}
+              {countryFilter.size > 0 && (
+                <Button variant="ghost" size="sm" className="w-full" onClick={() => setCountryFilter(new Set())}>
+                  Clear countries
+                </Button>
+              )}
+            </div>
+          </details>
+        </div>
 
         <div className="flex min-w-48 items-center gap-2 text-sm">
           <span className="whitespace-nowrap text-muted-foreground">
