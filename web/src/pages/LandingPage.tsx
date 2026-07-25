@@ -11,13 +11,14 @@ import {
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { ScorePill } from "../components/ui/ScorePill";
+import { Logo } from "../components/ui/Logo";
 
 function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link to="/" className="flex items-center gap-2">
-          <span className="text-base leading-none">📈</span>
+          <Logo className="h-4 w-4 shrink-0" />
           <span className="text-sm font-semibold">Analects 2.17</span>
         </Link>
         <nav className="flex items-center gap-3">

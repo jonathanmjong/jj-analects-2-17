@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthProvider";
+import { Logo } from "../ui/Logo";
 import { cn } from "../../lib/utils";
 
 const NAV_LINKS = [
@@ -46,7 +47,7 @@ function SidebarContent({ onNavigate, collapsed = false, onToggleCollapse }: Sid
           onClick={onNavigate}
           title={collapsed ? "Analects 2.17" : undefined}
         >
-          <span className="text-base leading-none">📈</span>
+          <Logo className="h-4 w-4 shrink-0" />
           {!collapsed && <span className="text-sm font-semibold">Analects 2.17</span>}
         </Link>
         {onToggleCollapse && !collapsed && (
@@ -196,7 +197,7 @@ export function Shell() {
             {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
           <Link to="/rankings" className="flex items-center gap-2">
-            <span className="text-base leading-none">📈</span>
+            <Logo className="h-4 w-4 shrink-0" />
             <span className="text-sm font-semibold">Analects 2.17</span>
           </Link>
         </div>
