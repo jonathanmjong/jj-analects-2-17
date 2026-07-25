@@ -12,8 +12,8 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import { Download, SlidersHorizontal } from "lucide-react";
-import type { Company, Sector } from "@proverbs/shared";
-import { SECTORS } from "@proverbs/shared";
+import type { Company, MetricCategory, Sector } from "@proverbs/shared";
+import { DEFAULT_RANKING_CONFIG, METRIC_CATEGORIES, SECTORS } from "@proverbs/shared";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { useAllRankings } from "../hooks/useAllRankings";
 import { useCustomRankings } from "../hooks/useCustomRankings";
@@ -49,6 +49,19 @@ const EMPTY_VALUE_FILTERS: ValueFilters = {
 
 /** Count of registered valuation metrics (see functions/src/metrics/definitions.ts) — used to render "x/10" and to drive the data-availability filter slider. */
 const VALUATION_METRIC_COUNT = 10;
+
+const CATEGORY_LABELS: Record<MetricCategory, string> = {
+  valuation: "Valuation",
+  momentum: "Momentum",
+  profitability: "Profitability",
+  growth: "Growth",
+  cashGeneration: "Cash Generation",
+  financialStrength: "Financial Strength",
+  capitalAllocation: "Capital Allocation",
+  efficiency: "Efficiency",
+  earningsQuality: "Earnings Quality",
+  moat: "Competitive Moat",
+};
 
 const columns: ColumnDef<Company>[] = [
   {
@@ -133,7 +146,16 @@ export function RankingsPage() {
   const { data: companies, isLoading } = useCompaniesList({ limitTo: 5000 });
   const { data: rankings } = useAllRankings();
   const { data: metricDefinitions } = useMetricDefinitions();
-  const { results: customResults, loading: recomputing, setMetricWeight, resetMetricWeights, recompute, config: customConfig } = useCustomRankings();
+  const {
+    results: customResults,
+    loading: recomputing,
+    setMetricWeight,
+    resetMetricWeights,
+    setCategoryWeight,
+    setConfig,
+    recompute,
+    config: customConfig,
+  } = useCustomRankings();
   const [metricWeightInputs, setMetricWeightInputs] = useState<Record<string, number>>({});
   const recomputeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -182,6 +204,24 @@ export function RankingsPage() {
     if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
     void recompute(nextConfig);
   }
+
+  /** Slider value is a 0-100 percent; stored/sent as a 0-1 weight, renormalized against the other categories server-side (doesn't need to sum to 100). */
+  function handleCategoryWeightChange(category: MetricCategory, percent: number) {
+    const nextConfig = setCategoryWeight(category, percent / 100);
+    if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
+    recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 350);
+  }
+
+  function handleResetCategoryWeights() {
+    const nextConfig = { ...customConfig, categoryWeights: DEFAULT_RANKING_CONFIG.categoryWeights };
+    setConfig(nextConfig);
+    if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
+    void recompute(nextConfig);
+  }
+
+  const categoryWeightsActive = METRIC_CATEGORIES.some(
+    (c) => customConfig.categoryWeights[c] !== DEFAULT_RANKING_CONFIG.categoryWeights[c],
+  );
 
   useEffect(() => {
     return () => {
@@ -503,6 +543,47 @@ export function RankingsPage() {
               {metricWeightsActive && (
                 <Button variant="ghost" size="sm" className="w-full" onClick={handleResetMetricWeights}>
                   Reset valuation weights
+                </Button>
+              )}
+            </div>
+          </details>
+        </div>
+
+        <div className="relative">
+          <details className="group">
+            <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-sm">
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Category weights
+              {categoryWeightsActive && (
+                <span className="rounded-full bg-accent px-1.5 text-[11px] text-accent-foreground">on</span>
+              )}
+              {recomputing && <span className="text-[11px] text-muted-foreground">recomputing…</span>}
+            </summary>
+            <div className="absolute z-10 mt-2 w-72 space-y-2 rounded-md border border-border bg-surface p-3 shadow-sm">
+              <p className="text-xs text-muted-foreground">
+                Reweight how much each category contributes to the overall score. Values don't need to sum to
+                100% — they're renormalized against each other. Overall score and rank update live for the whole
+                universe.
+              </p>
+              {METRIC_CATEGORIES.map((category) => (
+                <label key={category} className="block text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between">
+                    <span>{CATEGORY_LABELS[category]}</span>
+                    <span>{Math.round((customConfig.categoryWeights[category] ?? 0) * 100)}%</span>
+                  </div>
+                  <Slider
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={(customConfig.categoryWeights[category] ?? 0) * 100}
+                    onChange={(e) => handleCategoryWeightChange(category, Number(e.target.value))}
+                    className="mt-1"
+                  />
+                </label>
+              ))}
+              {categoryWeightsActive && (
+                <Button variant="ghost" size="sm" className="w-full" onClick={handleResetCategoryWeights}>
+                  Reset category weights
                 </Button>
               )}
             </div>

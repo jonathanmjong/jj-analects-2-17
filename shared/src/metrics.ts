@@ -67,15 +67,15 @@ export interface MetricScore {
 
 export const DEFAULT_CATEGORY_WEIGHTS: Record<MetricCategory, number> = {
   valuation: 0.2,
-  momentum: 0.1,
-  profitability: 0.2,
-  growth: 0.2,
-  financialStrength: 0.15,
+  profitability: 0.15,
+  growth: 0.15,
+  cashGeneration: 0.1,
+  financialStrength: 0.1,
   capitalAllocation: 0.1,
+  efficiency: 0.1,
   earningsQuality: 0.05,
-  cashGeneration: 0,
-  efficiency: 0,
-  moat: 0,
+  moat: 0.05,
+  momentum: 0,
 };
 
 /** Weighting applied across the trailing N years of a metric when building its multi-year score. */
