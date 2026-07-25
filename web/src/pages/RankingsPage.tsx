@@ -47,8 +47,6 @@ const EMPTY_VALUE_FILTERS: ValueFilters = {
   minRoicPct: "",
 };
 
-/** Count of registered valuation metrics (see functions/src/metrics/definitions.ts) — used to render "x/10" and to drive the data-availability filter slider. */
-const VALUATION_METRIC_COUNT = 10;
 
 const CATEGORY_LABELS: Record<MetricCategory, string> = {
   valuation: "Valuation",
@@ -130,13 +128,20 @@ const columns: ColumnDef<Company>[] = [
   { accessorKey: "isSp500", header: "S&P 500", cell: ({ getValue }) => (getValue<boolean>() ? "Yes" : "No") },
 ];
 
-function buildValuationColumn(rankings: Map<string, import("@proverbs/shared").RankingResult> | undefined): ColumnDef<Company> {
+function buildCategoryDataColumn(
+  rankings: Map<string, import("@proverbs/shared").RankingResult> | undefined,
+  activeCategories: MetricCategory[],
+  denominator: number,
+): ColumnDef<Company> {
   return {
-    id: "valuationDataAvailable",
-    header: "Valuation Data",
+    id: "categoryWeightDataAvailable",
+    header: "Category Data",
     cell: ({ row }) => {
-      const count = rankings?.get(row.original.ticker)?.categoryScores.find((c) => c.category === "valuation")?.metricsIncluded ?? 0;
-      return `${count}/${VALUATION_METRIC_COUNT}`;
+      const scores = rankings?.get(row.original.ticker)?.categoryScores ?? [];
+      const count = scores
+        .filter((c) => activeCategories.includes(c.category))
+        .reduce((sum, c) => sum + c.metricsIncluded, 0);
+      return `${count}/${denominator}`;
     },
   };
 }
@@ -152,24 +157,39 @@ export function RankingsPage() {
     setMetricWeight,
     resetMetricWeights,
     setCategoryWeight,
+    setYearsIncluded,
     setConfig,
     recompute,
     config: customConfig,
   } = useCustomRankings();
+  const yearsIncluded = customConfig.yearsIncluded;
   const [metricWeightInputs, setMetricWeightInputs] = useState<Record<string, number>>({});
   const recomputeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [globalFilter, setGlobalFilter] = useState("");
   const [sectorFilter, setSectorFilter] = useState<Sector | "all">("all");
   const [countryFilter, setCountryFilter] = useState<string>("all");
-  const [minValuationMetrics, setMinValuationMetrics] = useState(0);
+  const [minCategoryWeightMetrics, setMinCategoryWeightMetrics] = useState(0);
   const [valueFilters, setValueFilters] = useState<ValueFilters>(EMPTY_VALUE_FILTERS);
   const [formulaInput, setFormulaInput] = useState("");
   const [sorting, setSorting] = useState<SortingState>([{ id: "latest.overallRank", desc: false }]);
   const [visibility, setVisibility] = useState<VisibilityState>({ industry: false, "latest.sharePrice": false, country: false });
 
-  function valuationMetricsAvailable(ticker: string): number {
-    const valuationScore = rankings?.get(ticker)?.categoryScores.find((c) => c.category === "valuation");
-    return valuationScore?.metricsIncluded ?? 0;
+  /** Categories the user currently has a nonzero weight on, per the Category weights panel. */
+  const activeCategories = useMemo(
+    () => METRIC_CATEGORIES.filter((c) => (customConfig.categoryWeights[c] ?? 0) > 0),
+    [customConfig.categoryWeights],
+  );
+
+  const activeCategoryMetricCount = useMemo(
+    () => (metricDefinitions ?? []).filter((m) => activeCategories.includes(m.category)).length,
+    [metricDefinitions, activeCategories],
+  );
+
+  function categoryWeightDataAvailable(ticker: string): number {
+    const scores = rankings?.get(ticker)?.categoryScores ?? [];
+    return scores
+      .filter((c) => activeCategories.includes(c.category))
+      .reduce((sum, c) => sum + c.metricsIncluded, 0);
   }
 
   const activeValueFilterCount = Object.values(valueFilters).filter((v) => v !== "").length;
@@ -194,6 +214,12 @@ export function RankingsPage() {
   function handleMetricWeightChange(metricKey: string, weight: number) {
     setMetricWeightInputs((prev) => ({ ...prev, [metricKey]: weight }));
     const nextConfig = setMetricWeight(metricKey, weight);
+    if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
+    recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 350);
+  }
+
+  function handleYearsChange(value: number) {
+    const nextConfig = setYearsIncluded(value as 1 | 2 | 3 | 4 | 5);
     if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
     recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 350);
   }
@@ -257,7 +283,7 @@ export function RankingsPage() {
     return rows.filter((c) => {
       if (sectorFilter !== "all" && c.sector !== sectorFilter) return false;
       if (countryFilter !== "all" && c.country !== countryFilter) return false;
-      if (minValuationMetrics > 0 && valuationMetricsAvailable(c.ticker) < minValuationMetrics) return false;
+      if (minCategoryWeightMetrics > 0 && categoryWeightDataAvailable(c.ticker) < minCategoryWeightMetrics) return false;
 
       const marketCap = c.latest?.marketCap ?? null;
       if (marketCapMin !== null && (marketCap === null || marketCap < marketCapMin)) return false;
@@ -286,7 +312,7 @@ export function RankingsPage() {
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companies, sectorFilter, countryFilter, minValuationMetrics, rankings, valueFilters, formulaNode]);
+  }, [companies, sectorFilter, countryFilter, minCategoryWeightMetrics, activeCategories, rankings, valueFilters, formulaNode]);
 
   const displayData = useMemo(() => {
     if (!customOverrideByTicker) return filteredData;
@@ -300,7 +326,10 @@ export function RankingsPage() {
     });
   }, [filteredData, customOverrideByTicker]);
 
-  const tableColumns = useMemo(() => [...columns, buildValuationColumn(rankings)], [rankings]);
+  const tableColumns = useMemo(
+    () => [...columns, buildCategoryDataColumn(rankings, activeCategories, activeCategoryMetricCount)],
+    [rankings, activeCategories, activeCategoryMetricCount],
+  );
 
   const scatterData = useMemo<ScatterDatum[]>(() => {
     return filteredData
@@ -422,14 +451,21 @@ export function RankingsPage() {
 
         <div className="flex min-w-48 items-center gap-2 text-sm">
           <span className="whitespace-nowrap text-muted-foreground">
-            Min. valuation data: {minValuationMetrics}/{VALUATION_METRIC_COUNT}
+            Years of data: {yearsIncluded} {recomputing && "· recomputing…"}
+          </span>
+          <Slider min={1} max={5} step={1} value={yearsIncluded} onChange={(e) => handleYearsChange(Number(e.target.value))} />
+        </div>
+
+        <div className="flex min-w-48 items-center gap-2 text-sm">
+          <span className="whitespace-nowrap text-muted-foreground">
+            Min. category weight data: {minCategoryWeightMetrics}/{activeCategoryMetricCount}
           </span>
           <Slider
             min={0}
-            max={VALUATION_METRIC_COUNT}
+            max={activeCategoryMetricCount}
             step={1}
-            value={minValuationMetrics}
-            onChange={(e) => setMinValuationMetrics(Number(e.target.value))}
+            value={minCategoryWeightMetrics}
+            onChange={(e) => setMinCategoryWeightMetrics(Number(e.target.value))}
           />
         </div>
 
