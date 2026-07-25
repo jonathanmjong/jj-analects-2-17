@@ -1,3 +1,5 @@
+import type { MomentumSnapshot } from "./momentum.js";
+
 export type Sector =
   | "Technology"
   | "Healthcare"
@@ -53,6 +55,8 @@ export interface LatestSnapshot {
   overallRank: number | null;
   /** Raw P/E, EV/EBITDA, dividend yield, ROIC, FCF yield — see HeadlineMetrics in ranking.ts. Populated by the ranking engine, not price ingestion. */
   headlineMetrics?: HeadlineMetrics;
+  /** Populated by ingestPriceHistory.ts, independently of the price/statement refresh cycle. */
+  momentum?: MomentumSnapshot;
 }
 
 export interface HeadlineMetrics {

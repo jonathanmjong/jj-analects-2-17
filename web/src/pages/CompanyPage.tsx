@@ -17,6 +17,7 @@ import { formatCurrency, formatNumber, formatPercent } from "../lib/utils";
 
 const CATEGORY_LABELS: Record<string, string> = {
   valuation: "Valuation",
+  momentum: "Momentum",
   profitability: "Profitability",
   growth: "Growth",
   cashGeneration: "Cash Generation",

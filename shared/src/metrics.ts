@@ -1,5 +1,6 @@
 export type MetricCategory =
   | "valuation"
+  | "momentum"
   | "profitability"
   | "growth"
   | "cashGeneration"
@@ -11,6 +12,7 @@ export type MetricCategory =
 
 export const METRIC_CATEGORIES: MetricCategory[] = [
   "valuation",
+  "momentum",
   "profitability",
   "growth",
   "cashGeneration",
@@ -64,7 +66,8 @@ export interface MetricScore {
 }
 
 export const DEFAULT_CATEGORY_WEIGHTS: Record<MetricCategory, number> = {
-  valuation: 0.3,
+  valuation: 0.2,
+  momentum: 0.1,
   profitability: 0.2,
   growth: 0.2,
   financialStrength: 0.15,

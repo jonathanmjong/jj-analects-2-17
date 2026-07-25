@@ -1,4 +1,4 @@
-import type { BalanceSheet, CashFlowStatement, IncomeStatement, MarketDataPoint } from "@proverbs/shared";
+import type { BalanceSheet, CashFlowStatement, IncomeStatement, MarketDataPoint, PriceHistoryPoint } from "@proverbs/shared";
 import { FinancialDataProvider, type CompanyProfileResult, type ProviderCapabilities } from "./FinancialDataProvider.js";
 
 /**
@@ -49,6 +49,40 @@ export class YahooFinanceProvider extends FinancialDataProvider {
       chart?: { result?: Array<{ meta?: Record<string, unknown> }>; error?: unknown };
     };
     return json.chart?.result?.[0]?.meta ?? null;
+  }
+
+  /**
+   * Daily closing-price series for momentum calculations, using the same
+   * chart endpoint as fetchChartQuote but with a wider range/interval. Not
+   * part of the FinancialDataProvider contract — like SecEdgarProvider's
+   * getApproxMarketValue, this is provider-specific and called directly by
+   * the ingestion job that needs it (see ingestPriceHistory.ts).
+   */
+  async getPriceHistory(ticker: string, range = "2y"): Promise<PriceHistoryPoint[] | null> {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=${range}`;
+    const res = await fetch(url, { headers: { "User-Agent": this.userAgent, Accept: "application/json" } });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      chart?: {
+        result?: Array<{
+          timestamp?: number[];
+          indicators?: { quote?: Array<{ close?: Array<number | null> }> };
+        }>;
+        error?: unknown;
+      };
+    };
+    const result = json.chart?.result?.[0];
+    const timestamps = result?.timestamp;
+    const closes = result?.indicators?.quote?.[0]?.close;
+    if (!timestamps || !closes || timestamps.length === 0) return null;
+
+    const points: PriceHistoryPoint[] = [];
+    for (let i = 0; i < timestamps.length; i++) {
+      const close = closes[i];
+      if (close === null || close === undefined || !Number.isFinite(close)) continue;
+      points.push({ date: new Date(timestamps[i] * 1000).toISOString().slice(0, 10), close });
+    }
+    return points.length > 0 ? points : null;
   }
 
   private raw(node: unknown): number | null {

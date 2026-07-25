@@ -40,7 +40,8 @@ export interface RankingResult {
 
 export const DEFAULT_RANKING_CONFIG: RankingWeightsConfig = {
   categoryWeights: {
-    valuation: 0.3,
+    valuation: 0.2,
+    momentum: 0.1,
     profitability: 0.2,
     growth: 0.2,
     financialStrength: 0.15,

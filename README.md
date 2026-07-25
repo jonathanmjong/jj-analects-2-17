@@ -22,9 +22,9 @@ This is an **all-Firebase** stack (no separate Python/Postgres backend):
     ranking engine.
   - Callable functions handle checkout/billing-portal creation and on-demand rankings recompute.
   - An HTTPS Express app (`api`) serves CSV/JSON exports of the full ranked universe.
-- **Database:** Firestore (`companies`, with `marketData`/`incomeStatements`/`balanceSheets`/`cashFlowStatements`/
-  `historicalMetrics`/`metricScores` subcollections; `rankings/latest/companies`; `historicalRankings`;
-  `metricDefinitions`; `dataRefreshLogs`; `users`). See `firestore.rules` for the access model.
+- **Database:** Firestore (`companies`, with `marketData`/`priceHistory`/`incomeStatements`/`balanceSheets`/
+  `cashFlowStatements`/`historicalMetrics`/`metricScores` subcollections; `rankings/latest/companies`;
+  `historicalRankings`; `metricDefinitions`; `dataRefreshLogs`; `users`). See `firestore.rules` for the access model.
 - **Caching:** Firestore's own read caching + TanStack Query on the client stand in for the originally-specified
   Redis layer, consistent with the all-Firebase architecture decision. Heavy computation (metric scoring, ranking)
   runs in scheduled background functions, not on the request path — see `functions/src/scheduled/`.
@@ -64,15 +64,20 @@ references a concrete provider class.
 
 ## Metrics & ranking engine
 
-- ~70 metrics across 9 categories (`functions/src/metrics/calculators/`), registered in
+- ~73 metrics across 10 categories (`functions/src/metrics/calculators/`), registered in
   `functions/src/metrics/definitions.ts`. Adding a metric = one calculator function + one registry entry; nothing
   else in the pipeline changes.
+- **Momentum** (`functions/src/metrics/calculators/momentum.ts`): 12-1 month return and 3-/6-month risk-adjusted
+  (return / volatility) momentum, derived from a ~2-year daily price series fetched by
+  `priceHistoryRefresh` (`functions/src/ingestion/ingestPriceHistory.ts`, `computeMomentum.ts`) and denormalized
+  onto `companies/{ticker}.latest.momentum` — the same "current snapshot" pattern valuation metrics already use,
+  since SEC EDGAR has no price history to compute period-accurate momentum from.
 - Ranking engine (`functions/src/ranking/rankingEngine.ts`): winsorization, percentile **or** z-score
   normalization (user-selectable), ascending/descending metric direction, year-weighted multi-year scoring
   (35/25/20/10/10 across up to 5 fiscal years, renormalized over whichever years are actually present), missing
   data excluded from weighting (never treated as zero), configurable category weights with the specified
-  defaults (Valuation 30 / Profitability 20 / Growth 20 / Financial Strength 15 / Capital Allocation 10 /
-  Earnings Quality 5).
+  defaults (Valuation 20 / Momentum 10 / Profitability 20 / Growth 20 / Financial Strength 15 / Capital
+  Allocation 10 / Earnings Quality 5).
 - The "years of data" slider on the Home and Company pages calls `recomputeRankingsWithConfig` live and updates
   the page without a full reload.
 

@@ -1,6 +1,7 @@
 import type { MetricDefinition } from "@proverbs/shared";
 import type { MetricCalculator } from "./types.js";
 import * as valuation from "./calculators/valuation.js";
+import * as momentum from "./calculators/momentum.js";
 import * as profitability from "./calculators/profitability.js";
 import * as cashGeneration from "./calculators/cashGeneration.js";
 import { GROWTH_HORIZONS, GROWTH_LINE_ITEMS, growthCalculator } from "./calculators/growth.js";
@@ -27,6 +28,11 @@ const entries: MetricEntry[] = [
   { definition: { key: "earnings_yield", label: "Earnings Yield", category: "valuation", direction: "desc", unit: "percent", description: "EBIT divided by enterprise value.", enabled: true }, calculator: valuation.earningsYield },
   { definition: { key: "fcf_yield", label: "FCF Yield", category: "valuation", direction: "desc", unit: "percent", description: "Free cash flow divided by market cap.", enabled: true }, calculator: valuation.fcfYield },
   { definition: { key: "shareholder_yield_valuation", label: "Shareholder Yield", category: "valuation", direction: "desc", unit: "percent", description: "Dividends + buybacks - issuance, divided by market cap.", enabled: true }, calculator: valuation.shareholderYield },
+
+  // --- Momentum ---
+  { definition: { key: "momentum_12m1m", label: "12-1 Month Momentum", category: "momentum", direction: "desc", unit: "percent", description: "Trailing 12-month return excluding the most recent month (price 1 month ago vs. 12 months ago).", enabled: true }, calculator: momentum.return12m1m },
+  { definition: { key: "momentum_risk_adj_3m", label: "3-Month Risk-Adjusted Momentum", category: "momentum", direction: "desc", unit: "ratio", description: "Trailing 3-month return divided by trailing 3-month daily-return volatility.", enabled: true }, calculator: momentum.riskAdjusted3m },
+  { definition: { key: "momentum_risk_adj_6m", label: "6-Month Risk-Adjusted Momentum", category: "momentum", direction: "desc", unit: "ratio", description: "Trailing 6-month return divided by trailing 6-month daily-return volatility.", enabled: true }, calculator: momentum.riskAdjusted6m },
 
   // --- Profitability ---
   { definition: { key: "roic", label: "ROIC", category: "profitability", direction: "desc", unit: "percent", description: "Return on invested capital (NOPAT / invested capital).", enabled: true }, calculator: profitability.roic },

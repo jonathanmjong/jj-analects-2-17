@@ -87,7 +87,14 @@ export async function ingestFundamentalsForUniverse(tickers: string[]): Promise<
 }
 
 export async function logRefresh(
-  dataType: "prices" | "quarterly_statements" | "annual_statements" | "sp500_membership" | "rankings" | "universe_screening",
+  dataType:
+    | "prices"
+    | "price_history"
+    | "quarterly_statements"
+    | "annual_statements"
+    | "sp500_membership"
+    | "rankings"
+    | "universe_screening",
   provider: string,
   result: { succeeded: string[]; failed: Array<{ ticker: string; error: string }> },
   startedAt: string,

@@ -10,6 +10,7 @@ import { ScoreHeatmap, type HeatmapCell } from "../components/charts/ScoreHeatma
 
 const CATEGORY_LABELS: Record<string, string> = {
   valuation: "Valuation",
+  momentum: "Momentum",
   profitability: "Profitability",
   growth: "Growth",
   cashGeneration: "Cash Gen.",

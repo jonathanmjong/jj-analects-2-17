@@ -1,4 +1,4 @@
-import type { BalanceSheet, CashFlowStatement, IncomeStatement } from "@proverbs/shared";
+import type { BalanceSheet, CashFlowStatement, IncomeStatement, MomentumSnapshot } from "@proverbs/shared";
 
 export interface PeriodFinancials {
   income: IncomeStatement;
@@ -20,6 +20,8 @@ export interface MetricInput {
   enterpriseValue: number | null;
   sharePrice: number | null;
   sharesOutstanding: number | null;
+  /** Denormalized from companies/{ticker}.latest.momentum — null until priceHistoryRefresh has successfully fetched this ticker at least once. */
+  momentum: MomentumSnapshot | null;
 }
 
 export type MetricCalculator = (input: MetricInput) => number | null;

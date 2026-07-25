@@ -1,4 +1,4 @@
-import type { BalanceSheet, CashFlowStatement, IncomeStatement, MetricScore } from "@proverbs/shared";
+import type { BalanceSheet, CashFlowStatement, IncomeStatement, MetricScore, MomentumSnapshot } from "@proverbs/shared";
 import { collections } from "../lib/firestore.js";
 import type { MetricInput, PeriodFinancials } from "./types.js";
 import { METRIC_CALCULATORS, METRIC_DEFINITIONS } from "./definitions.js";
@@ -10,12 +10,13 @@ const MAX_PERIODS = 6; // need N+1 statements to compute an N-year CAGR, and we 
  * company and writes companies/{ticker}/metricScores/{periodKey}.
  *
  * NOTE (known limitation, tracked as backlog): valuation metrics (P/E, P/B,
- * EV/EBITDA, ...) use the *current* market snapshot for every historical
- * period because the ingestion layer only pulls today's quote, not
- * period-end historical prices. Non-market metrics (profitability, growth,
- * financial strength, efficiency, earnings quality, moat) are period-accurate.
- * Fixing this requires a historical-price ingestion job keyed by statement
- * period-end date — see README "Known Limitations".
+ * EV/EBITDA, ...) and momentum metrics use the *current* market
+ * snapshot/momentum for every historical period because the ingestion layer
+ * only pulls today's quote, not period-end historical prices. Non-market
+ * metrics (profitability, growth, financial strength, efficiency, earnings
+ * quality, moat) are period-accurate. Fixing this requires a historical-price
+ * ingestion job keyed by statement period-end date — see README "Known
+ * Limitations".
  */
 export async function computeMetricsForCompany(ticker: string): Promise<void> {
   const symbol = ticker.toUpperCase();
@@ -48,9 +49,16 @@ export async function computeMetricsForCompany(ticker: string): Promise<void> {
   }));
 
   const latest = companySnap.data()?.latest as
-    | { marketCap: number | null; enterpriseValue: number | null; sharePrice: number | null; sharesOutstanding: number | null }
+    | {
+        marketCap: number | null;
+        enterpriseValue: number | null;
+        sharePrice: number | null;
+        sharesOutstanding: number | null;
+        momentum?: MomentumSnapshot;
+      }
     | undefined;
   const marketCap = latest?.marketCap ?? null;
+  const momentum = latest?.momentum ?? null;
   const sharesOutstanding = latest?.sharesOutstanding ?? null;
   const totalDebtLatest = series[0]?.balance.totalDebt ?? null;
   const cashLatest = series[0]?.balance.cashAndEquivalents ?? null;
@@ -74,6 +82,7 @@ export async function computeMetricsForCompany(ticker: string): Promise<void> {
       enterpriseValue,
       sharePrice: latest?.sharePrice ?? null,
       sharesOutstanding,
+      momentum,
     };
 
     const scores: Record<string, MetricScore> = {};
