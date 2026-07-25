@@ -16,7 +16,7 @@ import { useAuth } from "../../context/AuthProvider";
 import { cn } from "../../lib/utils";
 
 const NAV_LINKS = [
-  { to: "/", label: "Rankings", icon: BarChart3 },
+  { to: "/rankings", label: "Rankings", icon: BarChart3 },
   { to: "/sectors", label: "Sectors", icon: PieChart },
   { to: "/compare", label: "Compare", icon: GitCompare },
   { to: "/watchlist", label: "Watchlist", icon: Star },
@@ -38,7 +38,7 @@ function SidebarContent({ onNavigate, collapsed = false, onToggleCollapse }: Sid
     <div className="flex h-full flex-col px-3 py-4">
       <div className="flex items-center gap-1">
         <Link
-          to="/"
+          to="/rankings"
           className={cn(
             "flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-hover",
             collapsed && "justify-center",
@@ -76,7 +76,7 @@ function SidebarContent({ onNavigate, collapsed = false, onToggleCollapse }: Sid
           <NavLink
             key={link.to}
             to={link.to}
-            end={link.to === "/"}
+            end
             onClick={onNavigate}
             title={collapsed ? link.label : undefined}
             className={({ isActive }: { isActive: boolean }) =>
@@ -195,7 +195,7 @@ export function Shell() {
           >
             {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
-          <Link to="/" className="flex items-center gap-2">
+          <Link to="/rankings" className="flex items-center gap-2">
             <span className="text-base leading-none">📈</span>
             <span className="text-sm font-semibold">Analects 2.17</span>
           </Link>

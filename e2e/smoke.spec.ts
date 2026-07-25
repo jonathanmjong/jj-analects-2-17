@@ -1,7 +1,15 @@
 import { test, expect } from "@playwright/test";
 
-test("unauthenticated visitors are redirected to /login", async ({ page }) => {
+test("unauthenticated visitors see the landing page at /", async ({ page }) => {
   await page.goto("/");
+  await expect(page).toHaveURL("/");
+  await expect(page.getByRole("heading", { level: 1, name: /every company/i })).toBeVisible();
+  await expect(page.getByText(/7-day free trial/i)).toBeVisible();
+});
+
+test("landing page's primary CTA leads to sign-in", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: /get started/i }).first().click();
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole("heading", { name: /sign in to analects 2.17/i })).toBeVisible();
 });

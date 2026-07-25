@@ -20,7 +20,7 @@ export function BillingPage() {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
-  if (subscribed) return <Navigate to="/" replace />;
+  if (subscribed) return <Navigate to="/rankings" replace />;
 
   async function startTrial() {
     setStarting(true);
@@ -31,7 +31,7 @@ export function BillingPage() {
         "createCheckoutSession",
       );
       const result = await createCheckoutSession({
-        successUrl: `${window.location.origin}/?checkout=success`,
+        successUrl: `${window.location.origin}/rankings?checkout=success`,
         cancelUrl: `${window.location.origin}/billing`,
       });
       window.location.href = result.data.url;

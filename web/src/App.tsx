@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Shell } from "./components/layout/Shell";
 import { RequireSubscription } from "./components/layout/RequireSubscription";
+import { RootRoute } from "./components/layout/RootRoute";
 import { Spinner } from "./components/ui/Spinner";
 
 const LoginPage = lazy(() => import("./pages/LoginPage").then((m) => ({ default: m.LoginPage })));
@@ -30,14 +31,16 @@ export default function App() {
   return (
     <Suspense fallback={<PageFallback />}>
       <Routes>
+        {/* Not wrapped in Shell — the landing page has its own minimal header/footer, no app sidebar. */}
+        <Route path="/" element={<RootRoute />} />
+
         <Route element={<Shell />}>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/admin" element={<AdminPage />} />
 
           <Route element={<RequireSubscription />}>
-            <Route path="/" element={<RankingsPage />} />
-            <Route path="/rankings" element={<Navigate to="/" replace />} />
+            <Route path="/rankings" element={<RankingsPage />} />
             <Route path="/company/:ticker" element={<CompanyPage />} />
             <Route path="/compare" element={<ComparePage />} />
             <Route path="/sectors" element={<SectorsOverviewPage />} />
