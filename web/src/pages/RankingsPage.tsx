@@ -214,6 +214,12 @@ export function RankingsPage() {
   const [sorting, setSorting] = useState<SortingState>([{ id: "latest.overallRank", desc: false }]);
   const [visibility, setVisibility] = useState<VisibilityState>({ industry: false, "latest.sharePrice": false, country: false });
 
+  /** Ticker -> live reranked result, once a category/metric-weight or years-of-data change has recomputed. Null until the first recompute finishes. */
+  const customOverrideByTicker = useMemo(() => {
+    if (!customResults) return null;
+    return new Map(customResults.map((r) => [r.ticker, r]));
+  }, [customResults]);
+
   /** Categories the user currently has a nonzero weight on, per the Category weights panel. */
   const activeCategories = useMemo(
     () => METRIC_CATEGORIES.filter((c) => (customConfig.categoryWeights[c] ?? 0) > 0),
@@ -239,7 +245,9 @@ export function RankingsPage() {
   }, [activeCategoryMetricCount]);
 
   function categoryWeightDataAvailable(ticker: string): number {
-    const scores = rankings?.get(ticker)?.categoryScores ?? [];
+    // Prefer the live reranked result when one exists — zeroing out a metric's weight in the
+    // Valuation weights panel excludes it (counted as missing), which a stale nightly snapshot won't reflect.
+    const scores = customOverrideByTicker?.get(ticker)?.categoryScores ?? rankings?.get(ticker)?.categoryScores ?? [];
     return scores
       .filter((c) => activeCategories.includes(c.category))
       .reduce((sum, c) => sum + c.metricsIncluded, 0);
@@ -308,11 +316,6 @@ export function RankingsPage() {
     };
   }, []);
 
-  const customOverrideByTicker = useMemo(() => {
-    if (!customResults) return null;
-    return new Map(customResults.map((r) => [r.ticker, r]));
-  }, [customResults]);
-
   const metricWeightsActive = Object.keys(customConfig.metricWeights ?? {}).length > 0;
 
   const { formulaNode, formulaError } = useMemo(() => {
@@ -357,7 +360,7 @@ export function RankingsPage() {
           dividendyield: headline?.dividendYield ?? null,
           fcfyield: headline?.fcfYield ?? null,
           revenuegrowth1y: headline?.revenueGrowth1y ?? null,
-          overallscore: c.latest?.overallScore ?? null,
+          overallscore: customOverrideByTicker?.get(c.ticker)?.overallScore ?? c.latest?.overallScore ?? null,
         };
         if (!evaluateFormula(formulaNode, context)) return false;
       }
@@ -365,7 +368,7 @@ export function RankingsPage() {
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companies, sectorFilter, countryFilter, minCategoryWeightMetrics, activeCategories, rankings, valueFilters, formulaNode]);
+  }, [companies, sectorFilter, countryFilter, minCategoryWeightMetrics, activeCategories, rankings, valueFilters, formulaNode, customOverrideByTicker]);
 
   const displayData = useMemo(() => {
     if (!customOverrideByTicker) return filteredData;
