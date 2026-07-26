@@ -3,4 +3,6 @@ export * from "./financials.js";
 export * from "./metrics.js";
 export * from "./momentum.js";
 export * from "./ranking.js";
+export * from "./rankingEngineCore.js";
+export * from "./rankingMath.js";
 export * from "./user.js";

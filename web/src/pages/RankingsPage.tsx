@@ -276,13 +276,13 @@ export function RankingsPage() {
     setMetricWeightInputs((prev) => ({ ...prev, [metricKey]: weight }));
     const nextConfig = setMetricWeight(metricKey, weight);
     if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
-    recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 350);
+    recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 60);
   }
 
   function handleYearsChange(value: number) {
     const nextConfig = setYearsIncluded(value as 1 | 2 | 3 | 4 | 5);
     if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
-    recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 350);
+    recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 60);
   }
 
   function handleResetMetricWeights() {
@@ -296,7 +296,7 @@ export function RankingsPage() {
   function handleCategoryWeightChange(category: MetricCategory, percent: number) {
     const nextConfig = setCategoryWeight(category, percent / 100);
     if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
-    recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 350);
+    recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 60);
   }
 
   function handleResetCategoryWeights() {

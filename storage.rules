@@ -1,0 +1,18 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Bulk ranking-universe export consumed by the Rankings page's
+    // client-side engine for instant live-reweighting — see
+    // functions/src/ranking/exportUniverseData.ts and
+    // web/src/lib/clientRankingEngine.ts. Same gate as the Firestore
+    // "companies"/"rankings" collections: subscribed users only.
+    match /public/ranking-universe.json.gz {
+      allow read: if request.auth != null && request.auth.token.subscribed == true;
+      allow write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
