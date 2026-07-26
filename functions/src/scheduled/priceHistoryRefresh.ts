@@ -5,7 +5,8 @@ import { ingestPriceHistoryForUniverse } from "../ingestion/ingestPriceHistory.j
 import { logRefresh } from "../ingestion/ingestFundamentals.js";
 import { SEED_UNIVERSE } from "../ingestion/universe.js";
 
-const BATCH_SIZE = 200;
+/** Smaller than dailyPriceRefresh's batch — at the 2s/ticker gap this now uses (see ingestPriceHistory.ts), 150 tickers keeps a single invocation comfortably under the 540s timeout. */
+const BATCH_SIZE = 150;
 /** How long a claimed lock is honored before being considered abandoned (crashed invocation). */
 const LOCK_DURATION_MS = 20 * 60 * 1000;
 

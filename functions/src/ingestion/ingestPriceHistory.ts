@@ -40,24 +40,25 @@ export async function ingestPriceHistoryForTicker(ticker: string): Promise<{ ok:
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Sequential with a real gap between requests, same reasoning as
- * ingestPricesForUniverse: Yahoo's chart endpoint silently drops most
- * responses under concurrency. A history fetch returns far more data per
- * call than a quote, so this uses a slightly longer gap.
+ * Sequential with a long gap between requests. Confirmed in production
+ * (2026-07-26) that Yahoo's chart endpoint applies a much stricter
+ * rate limit to this history query (range=1y) than to the plain daily-quote
+ * query ingestPricesForUniverse makes — that job succeeds ~96-100% of the
+ * time at a 350ms gap, while this one got HTTP 429 on nearly every request
+ * at a 450ms gap. No immediate same-ticker retry: retrying into an active
+ * 429 window just spends another request without helping, so a failed
+ * ticker is simply left for the next hourly invocation (whose cursor will
+ * eventually cycle back to it) rather than compounding the throttling here.
  */
 export async function ingestPriceHistoryForUniverse(tickers: string[]) {
   const succeeded: string[] = [];
   const failed: Array<{ ticker: string; error: string }> = [];
 
   for (const ticker of tickers) {
-    let result = await ingestPriceHistoryForTicker(ticker);
-    if (!result.ok) {
-      await sleep(800);
-      result = await ingestPriceHistoryForTicker(ticker);
-    }
+    const result = await ingestPriceHistoryForTicker(ticker);
     if (result.ok) succeeded.push(ticker);
     else failed.push({ ticker, error: result.error ?? "unknown error" });
-    await sleep(450);
+    await sleep(2000);
   }
   return { succeeded, failed };
 }
