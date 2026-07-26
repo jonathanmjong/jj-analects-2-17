@@ -6,23 +6,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#ffffff" />
 
-    <title>Analects 2.17 — Multi-Factor Equity Rankings</title>
-    <meta name="description" content="Every mid and large-cap company scored and ranked on ~70 metrics across valuation, momentum, profitability, growth, and more. Reweight the model live. 7-day free trial, $2/month." />
+    <title>Stock Screener &amp; Ranking Tool for Value Investing | Analects 2.17</title>
+    <meta name="description" content="Screen and rank every mid & large-cap stock on ~70 fundamental metrics — valuation, momentum, profitability, growth. A fundamental analysis and value investing tool for serious investors. 7-day free trial, $2/month." />
+    <meta name="keywords" content="stock screener, stock ranking, value investing, fundamental analysis, equity research, stock ratings, investment research tool, stock valuation, best stocks to buy" />
     <link rel="canonical" href="https://analects2.com/" />
     <meta name="robots" content="index, follow" />
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://analects2.com/" />
     <meta property="og:site_name" content="Analects 2.17" />
-    <meta property="og:title" content="Analects 2.17 — Every company, ranked, scored, and explained" />
-    <meta property="og:description" content="A multi-factor model scores every mid and large-cap company on valuation, momentum, profitability, growth, and more — then shows you exactly why." />
+    <meta property="og:title" content="Stock Screener & Ranking Tool for Value Investing | Analects 2.17" />
+    <meta property="og:description" content="Screen and rank every mid & large-cap stock on ~70 fundamental metrics — valuation, momentum, profitability, growth. Built for value investing and fundamental analysis." />
     <meta property="og:image" content="https://analects2.com/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Analects 2.17 — Every company, ranked, scored, and explained" />
-    <meta name="twitter:description" content="A multi-factor model scores every mid and large-cap company on valuation, momentum, profitability, growth, and more — then shows you exactly why." />
+    <meta name="twitter:title" content="Stock Screener & Ranking Tool for Value Investing | Analects 2.17" />
+    <meta name="twitter:description" content="Screen and rank every mid & large-cap stock on ~70 fundamental metrics — valuation, momentum, profitability, growth. Built for value investing and fundamental analysis." />
     <meta name="twitter:image" content="https://analects2.com/og-image.png" />
 
     <script type="application/ld+json">
@@ -33,7 +34,8 @@
         "url": "https://analects2.com/",
         "applicationCategory": "FinanceApplication",
         "operatingSystem": "Web",
-        "description": "A multi-factor investment ranking model that scores every mid and large-cap public company on valuation, momentum, profitability, growth, and more.",
+        "description": "A stock screener and ranking tool for value investing and fundamental analysis — scores every mid and large-cap public company on valuation, momentum, profitability, growth, and more.",
+        "keywords": "stock screener, stock ranking, value investing, fundamental analysis, equity research",
         "offers": {
           "@type": "Offer",
           "price": "2.00",
@@ -45,6 +47,64 @@
             "billingDuration": "P1M"
           }
         }
+      }
+    </script>
+
+    <!-- Mirrors the FAQ section on the landing page (web/src/pages/LandingPage.tsx, FAQS array) — keep the two in sync. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What counts as \"mid and large-cap\"?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The ranked universe is data-driven: every SEC-registered company is screened, and anything above roughly a $2B market cap qualifies — no hand-picked index list."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Where does the stock data come from?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Live prices from Yahoo Finance and official financial statements from SEC EDGAR — refreshed daily."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How is the stock ranking score calculated?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Each fundamental metric is ranked cross-sectionally against every other company (percentile or z-score), combined across up to 5 fiscal years with heavier weight on recent years, then rolled up into category and overall scores using the weights you choose."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I customize the stock screener's weighting for value investing?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes — every category and individual metric has a live weight slider on the Rankings page. The whole universe re-ranks instantly, no waiting for a batch job."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is this investment advice?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Analects 2.17 is a research and screening tool, not investment advice."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I cancel anytime?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes, from the billing portal — no phone calls, no retention flow."
+            }
+          }
+        ]
       }
     </script>
   </head>

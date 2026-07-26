@@ -90,8 +90,8 @@ function Hero() {
         <span className="text-accent">Ranked, scored,</span> and explained.
       </h1>
       <p className="mx-auto mt-6 max-w-xl text-balance text-lg text-muted-foreground sm:text-xl">
-        A multi-factor model scores every mid and large-cap company on valuation, momentum, profitability,
-        growth, and more — then shows you exactly why.
+        A multi-factor stock screener for value investing and fundamental analysis — scoring every mid and
+        large-cap company on valuation, momentum, profitability, growth, and more — then showing you exactly why.
       </p>
       <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
         {HERO_BADGES.map((t) => (
@@ -248,10 +248,10 @@ function FeatureGrid() {
     <section id="features" className="mx-auto max-w-6xl scroll-mt-16 px-4 py-20 sm:px-6 sm:py-28">
       <div className="mx-auto max-w-2xl text-center">
         <h2 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">
-          Made for <span className="text-accent">serious</span> research.
+          Built for <span className="text-accent">value investing</span> and fundamental analysis.
         </h2>
         <p className="mt-4 text-balance text-base text-muted-foreground sm:text-lg">
-          Every tool is built around one idea: show the number, then show exactly why.
+          Every tool in this stock screener is built around one idea: show the number, then show exactly why.
         </p>
       </div>
       <div className="mt-14 grid gap-5 sm:grid-cols-2">
@@ -307,15 +307,15 @@ const FAQS = [
     a: "The ranked universe is data-driven: every SEC-registered company is screened, and anything above roughly a $2B market cap qualifies — no hand-picked index list.",
   },
   {
-    q: "Where does the data come from?",
+    q: "Where does the stock data come from?",
     a: "Live prices from Yahoo Finance and official financial statements from SEC EDGAR — refreshed daily.",
   },
   {
-    q: "How is the score calculated?",
-    a: "Each metric is ranked cross-sectionally against every other company (percentile or z-score), combined across up to 5 fiscal years with heavier weight on recent years, then rolled up into category and overall scores using the weights you choose.",
+    q: "How is the stock ranking score calculated?",
+    a: "Each fundamental metric is ranked cross-sectionally against every other company (percentile or z-score), combined across up to 5 fiscal years with heavier weight on recent years, then rolled up into category and overall scores using the weights you choose.",
   },
   {
-    q: "Can I change how it's weighted?",
+    q: "Can I customize the stock screener's weighting for value investing?",
     a: "Yes — every category and individual metric has a live weight slider on the Rankings page. The whole universe re-ranks instantly, no waiting for a batch job.",
   },
   {
