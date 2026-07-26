@@ -1,5 +1,6 @@
 import type { BalanceSheet, CashFlowStatement, IncomeStatement, MarketDataPoint, PriceHistoryPoint } from "@proverbs/shared";
 import { FinancialDataProvider, type CompanyProfileResult, type ProviderCapabilities } from "./FinancialDataProvider.js";
+import { log } from "../lib/logger.js";
 
 /**
  * Unofficial, keyless Yahoo Finance adapter (query1/query2.finance.yahoo.com).
@@ -71,7 +72,11 @@ export class YahooFinanceProvider extends FinancialDataProvider {
   async getPriceHistory(ticker: string, range = "1y"): Promise<PriceHistoryPoint[] | null> {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=${range}`;
     const res = await fetch(url, { headers: { "User-Agent": this.userAgent, Accept: "application/json" } });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const body = await res.text().catch(() => "<unreadable>");
+      log.warn(`getPriceHistory(${ticker}): HTTP ${res.status} ${res.statusText} — ${body.slice(0, 300)}`);
+      return null;
+    }
     const json = (await res.json()) as {
       chart?: {
         result?: Array<{
@@ -84,7 +89,10 @@ export class YahooFinanceProvider extends FinancialDataProvider {
     const result = json.chart?.result?.[0];
     const timestamps = result?.timestamp;
     const closes = result?.indicators?.quote?.[0]?.close;
-    if (!timestamps || !closes || timestamps.length === 0) return null;
+    if (!timestamps || !closes || timestamps.length === 0) {
+      log.warn(`getPriceHistory(${ticker}): no usable timestamp/close data — chart.error=${JSON.stringify(json.chart?.error)}`);
+      return null;
+    }
 
     const points: PriceHistoryPoint[] = [];
     for (let i = 0; i < timestamps.length; i++) {
