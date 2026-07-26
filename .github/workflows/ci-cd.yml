@@ -76,9 +76,9 @@ jobs:
       - name: Build web
         run: npm run build:web
 
-      - name: Deploy to Firebase (Hosting, Functions, Firestore rules/indexes)
+      - name: Deploy to Firebase (Hosting, Functions, Firestore rules/indexes, Storage rules)
         uses: w9jds/firebase-action@v13.19.0
         with:
-          args: deploy --only hosting,functions,firestore --project jj-analects-2-17
+          args: deploy --only hosting,functions,firestore,storage --project jj-analects-2-17
         env:
           GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
