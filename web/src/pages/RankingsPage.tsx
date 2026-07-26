@@ -11,7 +11,7 @@ import {
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { Download, SlidersHorizontal } from "lucide-react";
+import { Download, HelpCircle, SlidersHorizontal } from "lucide-react";
 import type { Company, MetricCategory, Sector } from "@proverbs/shared";
 import { DEFAULT_RANKING_CONFIG, METRIC_CATEGORIES, SECTORS } from "@proverbs/shared";
 import { useCompaniesList } from "../hooks/useCompanies";
@@ -60,6 +60,25 @@ const CATEGORY_LABELS: Record<MetricCategory, string> = {
   earningsQuality: "Earnings Quality",
   moat: "Competitive Moat",
 };
+
+const FORMULA_FIELD_INFO: Array<{ field: string; description: string; example: string }> = [
+  { field: "marketCap", description: "Market capitalization", example: "marketCap > 10B" },
+  { field: "roic", description: "Return on invested capital", example: "roic > 15%" },
+  { field: "peTtm", description: "Price / earnings (trailing 12mo)", example: "peTtm < 20" },
+  { field: "evEbitda", description: "Enterprise value / EBITDA", example: "evEbitda < 15" },
+  { field: "dividendYield", description: "Dividend yield", example: "dividendYield > 2%" },
+  { field: "fcfYield", description: "Free cash flow yield", example: "fcfYield > 5%" },
+  { field: "revenueGrowth1y", description: "1-year revenue growth", example: "revenueGrowth1y > 10%" },
+  { field: "overallScore", description: "Overall ranking score (0-100)", example: "overallScore > 70" },
+];
+
+const FORMULA_EXAMPLES = [
+  "roic > 15% AND peTtm < 20",
+  "marketCap > 10B AND dividendYield > 2%",
+  "overallScore > 70 AND evEbitda < 15",
+  "(roic > 12% OR fcfYield > 5%) AND revenueGrowth1y > 0%",
+  "NOT (peTtm > 30)",
+];
 
 const columns: ColumnDef<Company>[] = [
   {
@@ -191,6 +210,7 @@ export function RankingsPage() {
   const [minCategoryWeightMetrics, setMinCategoryWeightMetrics] = useState(0);
   const [valueFilters, setValueFilters] = useState<ValueFilters>(EMPTY_VALUE_FILTERS);
   const [formulaInput, setFormulaInput] = useState("");
+  const [formulaHelpOpen, setFormulaHelpOpen] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([{ id: "latest.overallRank", desc: false }]);
   const [visibility, setVisibility] = useState<VisibilityState>({ industry: false, "latest.sharePrice": false, country: false });
 
@@ -715,27 +735,73 @@ export function RankingsPage() {
         </div>
       </div>
 
-      <div>
+      <div className="relative">
         <div className="flex items-center gap-2">
-          <Input
-            placeholder='Custom formula, e.g. "roic > 15% AND peTtm < 20 AND marketCap > 5B"'
-            value={formulaInput}
-            onChange={(e) => setFormulaInput(e.target.value)}
-            className="max-w-xl font-mono text-xs"
-          />
+          <div className="relative max-w-xl flex-1">
+            <Input
+              placeholder='Custom formula, e.g. "roic > 15% AND peTtm < 20 AND marketCap > 5B"'
+              value={formulaInput}
+              onFocus={() => setFormulaHelpOpen(true)}
+              onBlur={() => setFormulaHelpOpen(false)}
+              onChange={(e) => setFormulaInput(e.target.value)}
+              className="font-mono text-xs"
+            />
+            <HelpCircle className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          </div>
           {formulaInput && (
             <Button variant="ghost" size="sm" onClick={() => setFormulaInput("")}>
               Clear
             </Button>
           )}
         </div>
-        {formulaError ? (
-          <p className="mt-1 text-xs text-negative">{formulaError}</p>
-        ) : (
-          <p className="mt-1 text-xs text-muted-foreground">
-            Fields: marketCap (use B/M suffix), roic, peTtm, evEbitda, dividendYield, fcfYield, revenueGrowth1y,
-            overallScore. Operators: &gt; &lt; &gt;= &lt;= == != AND OR NOT ( ).
-          </p>
+        {formulaError && <p className="mt-1 text-xs text-negative">{formulaError}</p>}
+
+        {formulaHelpOpen && (
+          <div className="absolute z-20 mt-2 w-full max-w-xl space-y-3 rounded-md border border-border bg-surface p-3 shadow-md">
+            <div>
+              <p className="text-xs font-semibold text-foreground">Fields</p>
+              <table className="mt-1.5 w-full text-xs">
+                <tbody>
+                  {FORMULA_FIELD_INFO.map((f) => (
+                    <tr key={f.field}>
+                      <td className="whitespace-nowrap py-0.5 pr-3 font-mono text-accent">{f.field}</td>
+                      <td className="py-0.5 pr-3 text-muted-foreground">{f.description}</td>
+                      <td className="whitespace-nowrap py-0.5 font-mono text-muted-foreground">{f.example}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground">Operators &amp; syntax</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Comparisons: <code className="font-mono">&gt; &lt; &gt;= &lt;= == !=</code>. Combine with{" "}
+                <code className="font-mono">AND</code>, <code className="font-mono">OR</code>,{" "}
+                <code className="font-mono">NOT</code>, and parentheses. Number suffixes:{" "}
+                <code className="font-mono">%</code> divides by 100 (e.g. <code className="font-mono">15%</code> ={" "}
+                0.15), <code className="font-mono">B</code>/<code className="font-mono">M</code> multiply by
+                billion/million. Field names aren't case-sensitive.
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground">Examples (click to use)</p>
+              <div className="mt-1.5 flex flex-col gap-1">
+                {FORMULA_EXAMPLES.map((ex) => (
+                  <button
+                    key={ex}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // keep focus on the input instead of blurring the popup away
+                      setFormulaInput(ex);
+                    }}
+                    className="rounded-md px-2 py-1 text-left font-mono text-xs text-foreground/80 hover:bg-surface-hover"
+                  >
+                    {ex}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
