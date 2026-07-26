@@ -528,26 +528,6 @@ export function RankingsPage() {
           </details>
         </div>
 
-        <div className="flex min-w-48 items-center gap-2 text-sm">
-          <span className="whitespace-nowrap text-muted-foreground">
-            Years of data: {yearsIncluded} {recomputing && "· recomputing…"}
-          </span>
-          <Slider min={1} max={5} step={1} value={yearsIncluded} onChange={(e) => handleYearsChange(Number(e.target.value))} />
-        </div>
-
-        <div className="flex min-w-48 items-center gap-2 text-sm">
-          <span className="whitespace-nowrap text-muted-foreground">
-            Min. category weight data: {minCategoryWeightMetrics}/{activeCategoryMetricCount}
-          </span>
-          <Slider
-            min={0}
-            max={activeCategoryMetricCount}
-            step={1}
-            value={minCategoryWeightMetrics}
-            onChange={(e) => setMinCategoryWeightMetrics(Number(e.target.value))}
-          />
-        </div>
-
         <div className="relative">
           <details className="group">
             <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-sm">
@@ -735,6 +715,28 @@ export function RankingsPage() {
           <Button variant="outline" size="sm" onClick={() => exportRows("json")}>
             <Download className="h-4 w-4" /> JSON
           </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-6">
+        <div className="flex min-w-48 items-center gap-2 text-sm">
+          <span className="whitespace-nowrap text-muted-foreground">
+            Years of data: {yearsIncluded} {recomputing && "· recomputing…"}
+          </span>
+          <Slider min={1} max={5} step={1} value={yearsIncluded} onChange={(e) => handleYearsChange(Number(e.target.value))} />
+        </div>
+
+        <div className="flex min-w-48 items-center gap-2 text-sm">
+          <span className="whitespace-nowrap text-muted-foreground">
+            Min. category weight data: {minCategoryWeightMetrics}/{activeCategoryMetricCount}
+          </span>
+          <Slider
+            min={0}
+            max={activeCategoryMetricCount}
+            step={1}
+            value={minCategoryWeightMetrics}
+            onChange={(e) => setMinCategoryWeightMetrics(Number(e.target.value))}
+          />
         </div>
       </div>
 

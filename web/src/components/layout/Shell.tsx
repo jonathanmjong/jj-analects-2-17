@@ -167,7 +167,7 @@ export function Shell() {
     <div className="flex min-h-screen bg-background text-foreground">
       <aside
         className={cn(
-          "hidden shrink-0 flex-col border-r border-border bg-sidebar transition-[width] duration-200 md:flex",
+          "sticky top-0 hidden h-screen shrink-0 flex-col overflow-y-auto border-r border-border bg-sidebar transition-[width] duration-200 md:flex",
           collapsed ? "w-16" : "w-60",
         )}
       >
