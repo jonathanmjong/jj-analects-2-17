@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Allow: /login
+Disallow: /rankings
+Disallow: /company/
+Disallow: /compare
+Disallow: /sectors
+Disallow: /watchlist
+Disallow: /billing
+Disallow: /admin
+
+Sitemap: https://analects2.com/sitemap.xml
