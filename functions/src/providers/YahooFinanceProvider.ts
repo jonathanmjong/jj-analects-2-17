@@ -57,8 +57,18 @@ export class YahooFinanceProvider extends FinancialDataProvider {
    * part of the FinancialDataProvider contract — like SecEdgarProvider's
    * getApproxMarketValue, this is provider-specific and called directly by
    * the ingestion job that needs it (see ingestPriceHistory.ts).
+   *
+   * Default range is 1y, not 2y: computeMomentum's longest lookback is 12
+   * months (the 12-1 month return), so 2y of history was pure waste — and in
+   * production, range=2y requests were failing 100% of the time (0/1000+
+   * tickers) from Cloud Functions' IPs while the identical endpoint with
+   * range=1d for daily quotes succeeded ~96-100% of the time. The working
+   * theory is Yahoo rate-limits/blocks larger, more "expensive" chart
+   * queries more aggressively from datacenter IPs than small ones; shrinking
+   * the payload is a strict improvement regardless of whether that's the
+   * exact mechanism.
    */
-  async getPriceHistory(ticker: string, range = "2y"): Promise<PriceHistoryPoint[] | null> {
+  async getPriceHistory(ticker: string, range = "1y"): Promise<PriceHistoryPoint[] | null> {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=${range}`;
     const res = await fetch(url, { headers: { "User-Agent": this.userAgent, Accept: "application/json" } });
     if (!res.ok) return null;
