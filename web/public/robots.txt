@@ -1,6 +1,8 @@
 User-agent: *
 Allow: /
 Allow: /login
+Allow: /preview
+Allow: /vs/
 Disallow: /rankings
 Disallow: /company/
 Disallow: /compare

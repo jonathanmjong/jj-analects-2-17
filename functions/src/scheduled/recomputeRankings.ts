@@ -1,6 +1,6 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall } from "firebase-functions/v2/https";
-import { computeRankings, persistRankings } from "../ranking/rankingEngine.js";
+import { computeRankings, persistPublicPreview, persistRankings } from "../ranking/rankingEngine.js";
 import { logRefresh } from "../ingestion/ingestFundamentals.js";
 
 /** Recomputes overall rankings nightly after prices refresh, using the default ranking config. */
@@ -10,6 +10,7 @@ export const recomputeRankingsDaily = onSchedule(
     const startedAt = new Date().toISOString();
     const results = await computeRankings(undefined, true);
     await persistRankings(results);
+    await persistPublicPreview(results);
     await logRefresh(
       "rankings",
       "ranking_engine",

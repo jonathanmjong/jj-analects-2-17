@@ -18,6 +18,10 @@ export interface UserProfile {
   trialEnd: string | null;
   currentPeriodEnd: string | null;
   watchlist: string[];
+  /** uid of the user whose referral link brought this user in, captured at signup. Null if none/direct. */
+  referredBy: string | null;
+  /** True once referredBy's free-month reward has been granted for this user's first paid conversion — prevents double-crediting. */
+  referralCreditGranted: boolean;
   createdAt: string;
   updatedAt: string;
 }

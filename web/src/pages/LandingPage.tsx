@@ -262,6 +262,18 @@ export function LandingPage() {
       <PricingSection />
       <FaqSection />
 
+      <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-border px-4 py-6 text-sm sm:px-6">
+        <Link to="/preview" className="text-muted-foreground hover:text-foreground">
+          See today's top 20 (no signup)
+        </Link>
+        <Link to="/vs/finviz" className="text-muted-foreground hover:text-foreground">
+          Analects 2.17 vs Finviz
+        </Link>
+        <Link to="/vs/stock-rover" className="text-muted-foreground hover:text-foreground">
+          Analects 2.17 vs Stock Rover
+        </Link>
+      </div>
+
       <footer className="border-t border-border px-4 py-8 text-center text-xs text-muted-foreground sm:px-6">
         Analects 2.17 — "When you know a thing, to hold that you know it; and when you do not know a thing, to
         allow that you do not know it — this is knowledge." Data from Yahoo Finance and SEC EDGAR; not investment

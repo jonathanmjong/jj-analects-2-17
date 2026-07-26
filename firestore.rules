@@ -24,6 +24,14 @@ service cloud.firestore {
       }
     }
 
+    // Public, no-signup preview for the marketing site: top 20 companies,
+    // name/sector/score only (no metric breakdown). Populated by
+    // recomputeRankingsDaily. Every other rankings doc stays subscribed-only.
+    match /rankings/preview {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /rankings/{docId} {
       allow read: if isSubscribed();
       allow write: if false;

@@ -244,6 +244,34 @@ async function persistMetricPercentiles(
   }
 }
 
+/**
+ * Writes a small, public-readable preview (top 20 by rank, name + sector +
+ * score only — no metric breakdown) for the marketing site's no-signup
+ * preview page. firestore.rules carves out rankings/preview specifically as
+ * the one document anonymous visitors can read; everything else in
+ * `rankings` stays behind the subscribed-only rule.
+ */
+export async function persistPublicPreview(results: RankingResult[]): Promise<void> {
+  const top20 = results
+    .filter((r) => r.overallRank !== null && r.overallRank <= 20)
+    .sort((a, b) => (a.overallRank as number) - (b.overallRank as number));
+  if (top20.length === 0) return;
+
+  const companySnaps = await Promise.all(top20.map((r) => collections.company(r.ticker).get()));
+  const companies = top20.map((r, i) => {
+    const data = companySnaps[i].data();
+    return {
+      ticker: r.ticker,
+      companyName: (data?.companyName as string | undefined) ?? r.ticker,
+      sector: (data?.sector as string | null | undefined) ?? null,
+      overallScore: r.overallScore,
+      overallRank: r.overallRank,
+    };
+  });
+
+  await db.collection("rankings").doc("preview").set({ companies, updatedAt: new Date().toISOString() });
+}
+
 export async function persistRankings(results: RankingResult[]): Promise<void> {
   const batchSize = 400;
   for (let i = 0; i < results.length; i += batchSize) {

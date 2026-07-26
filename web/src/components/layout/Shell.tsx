@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   BarChart3,
+  Check,
   ChevronsLeft,
   ChevronsRight,
+  Gift,
   GitCompare,
   LogOut,
   Menu,
@@ -14,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthProvider";
 import { Logo } from "../ui/Logo";
+import { referralLinkFor } from "../../lib/referral";
 import { cn } from "../../lib/utils";
 
 const NAV_LINKS = [
@@ -24,6 +27,34 @@ const NAV_LINKS = [
 ];
 
 const SIDEBAR_COLLAPSED_KEY = "sidebarCollapsed";
+
+function ReferralButton({ uid, collapsed }: { uid: string; collapsed: boolean }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleClick() {
+    try {
+      await navigator.clipboard.writeText(referralLinkFor(uid));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Clipboard access can fail (permissions, insecure context) — nothing destructive to recover from, just don't show "Copied".
+    }
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      title={collapsed ? "Invite a friend, earn a free month" : undefined}
+      className={cn(
+        "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground/80 transition-colors hover:bg-surface-hover",
+        collapsed && "justify-center",
+      )}
+    >
+      {copied ? <Check className="h-4 w-4 shrink-0 text-positive" /> : <Gift className="h-4 w-4 shrink-0 text-muted-foreground" />}
+      {!collapsed && <span>{copied ? "Link copied!" : "Invite & earn a free month"}</span>}
+    </button>
+  );
+}
 
 interface SidebarContentProps {
   onNavigate?: () => void;
@@ -92,6 +123,7 @@ function SidebarContent({ onNavigate, collapsed = false, onToggleCollapse }: Sid
             {!collapsed && link.label}
           </NavLink>
         ))}
+        {user && <ReferralButton uid={user.uid} collapsed={collapsed} />}
       </nav>
 
       <div className="mt-auto flex flex-col gap-2 border-t border-border pt-3">

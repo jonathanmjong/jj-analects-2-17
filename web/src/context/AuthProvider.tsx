@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { signInWithPopup, signOut as firebaseSignOut, onIdTokenChanged, type User } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db, googleProvider } from "../lib/firebase";
+import { clearStoredReferralCode, getStoredReferralCode } from "../lib/referral";
 
 interface AuthContextValue {
   user: User | null;
@@ -18,6 +19,7 @@ async function ensureUserDocument(user: User): Promise<void> {
   const ref = doc(db, "users", user.uid);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
+    const referredBy = getStoredReferralCode();
     await setDoc(ref, {
       uid: user.uid,
       email: user.email,
@@ -29,9 +31,13 @@ async function ensureUserDocument(user: User): Promise<void> {
       trialEnd: null,
       currentPeriodEnd: null,
       watchlist: [],
+      // Self-referral (e.g. a stale ?ref=<own-uid> from testing your own link) doesn't count.
+      referredBy: referredBy && referredBy !== user.uid ? referredBy : null,
+      referralCreditGranted: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    clearStoredReferralCode();
   }
 }
 

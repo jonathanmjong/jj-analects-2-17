@@ -34,6 +34,49 @@ async function syncSubscription(sub: Stripe.Subscription): Promise<void> {
   await getAuth().setCustomUserClaims(uid, { subscribed: ACTIVE_ACCESS_STATUSES.includes(status) });
 }
 
+const REFERRAL_COUPON_ID = "referral-free-month";
+
+/**
+ * Referral reward: when a referred user's trial converts to a real paying
+ * subscription (status transitions trialing -> active — the first actual
+ * charge), the referrer gets one month free applied as a coupon on their
+ * own subscription. Gated by referralCreditGranted on the REFERRED user's
+ * doc so a re-delivered webhook (Stripe retries on any non-2xx) can't grant
+ * the same reward twice.
+ */
+async function maybeGrantReferralReward(
+  sub: Stripe.Subscription,
+  previousAttributes: Partial<Stripe.Subscription> | undefined,
+): Promise<void> {
+  const becameActive = previousAttributes?.status === "trialing" && sub.status === "active";
+  if (!becameActive) return;
+
+  const uid = (sub.metadata?.firebaseUid as string | undefined) ?? (await findUidForCustomer(sub.customer as string));
+  if (!uid) return;
+
+  const userRef = collections.users().doc(uid);
+  const userSnap = await userRef.get();
+  const referredBy = userSnap.data()?.referredBy as string | null | undefined;
+  const alreadyGranted = userSnap.data()?.referralCreditGranted as boolean | undefined;
+  if (!referredBy || alreadyGranted) return;
+
+  const referrerSnap = await collections.users().doc(referredBy).get();
+  const referrerSubId = referrerSnap.data()?.stripeSubscriptionId as string | undefined;
+  if (!referrerSubId) {
+    log.warn(`stripeWebhook: referrer ${referredBy} has no subscription to credit (referred user ${uid})`);
+    return;
+  }
+
+  try {
+    const stripe = getStripeClient();
+    await stripe.subscriptions.update(referrerSubId, { coupon: REFERRAL_COUPON_ID });
+    await userRef.set({ referralCreditGranted: true, updatedAt: new Date().toISOString() }, { merge: true });
+    log.info(`stripeWebhook: granted referral reward to ${referredBy} for referring ${uid}`);
+  } catch (err) {
+    log.error(`stripeWebhook: failed to apply referral coupon to referrer ${referredBy}'s subscription`, err);
+  }
+}
+
 export const stripeWebhook = onRequest(
   { secrets: [stripeSecretKey, stripeWebhookSecret] },
   async (req, res) => {
@@ -64,9 +107,15 @@ export const stripeWebhook = onRequest(
           break;
         }
         case "customer.subscription.created":
-        case "customer.subscription.updated":
         case "customer.subscription.deleted": {
           await syncSubscription(event.data.object as Stripe.Subscription);
+          break;
+        }
+        case "customer.subscription.updated": {
+          const sub = event.data.object as Stripe.Subscription;
+          const previousAttributes = (event.data as { previous_attributes?: Partial<Stripe.Subscription> }).previous_attributes;
+          await syncSubscription(sub);
+          await maybeGrantReferralReward(sub, previousAttributes);
           break;
         }
         default:
