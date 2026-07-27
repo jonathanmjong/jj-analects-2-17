@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   BarChart3,
@@ -30,8 +30,33 @@ const SIDEBAR_COLLAPSED_KEY = "sidebarCollapsed";
 
 function ReferralButton({ uid, collapsed }: { uid: string; collapsed: boolean }) {
   const [copied, setCopied] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [infoPos, setInfoPos] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Positioned via a fixed-coordinate portal-less panel (not a plain CSS absolute popover) because
+  // the sidebar's overflow-y-auto implicitly clips horizontal overflow too, which would cut off a
+  // popover anchored to the right of a narrow (or collapsed, icon-only) sidebar.
+  function openInfo() {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect) {
+      setInfoPos({ top: rect.top, left: Math.min(rect.right + 8, window.innerWidth - 300) });
+    }
+    setInfoOpen(true);
+  }
+
+  function closeInfoSoon(delay = 150) {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => setInfoOpen(false), delay);
+  }
 
   async function handleClick() {
+    // Also opens (briefly) on click, not just hover — the only way touch/mobile users, who can't
+    // hover, get to see the explanation at all.
+    openInfo();
+    closeInfoSoon(4000);
     try {
       await navigator.clipboard.writeText(referralLinkFor(uid));
       setCopied(true);
@@ -41,18 +66,44 @@ function ReferralButton({ uid, collapsed }: { uid: string; collapsed: boolean })
     }
   }
 
+  useEffect(() => {
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
+  }, []);
+
   return (
-    <button
-      onClick={handleClick}
-      title={collapsed ? "Invite a friend, earn a free month" : undefined}
-      className={cn(
-        "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground/80 transition-colors hover:bg-surface-hover",
-        collapsed && "justify-center",
+    <>
+      <button
+        ref={buttonRef}
+        onClick={handleClick}
+        onMouseEnter={openInfo}
+        onMouseLeave={() => closeInfoSoon()}
+        aria-label="Invite a friend and earn a free month"
+        className={cn(
+          "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground/80 transition-colors hover:bg-surface-hover",
+          collapsed && "justify-center",
+        )}
+      >
+        {copied ? <Check className="h-4 w-4 shrink-0 text-positive" /> : <Gift className="h-4 w-4 shrink-0 text-muted-foreground" />}
+        {!collapsed && <span>{copied ? "Link copied!" : "Invite & earn a free month"}</span>}
+      </button>
+      {infoOpen && infoPos && (
+        <div
+          className="fixed z-50 w-72 rounded-md border border-border bg-surface p-3 text-xs shadow-md"
+          style={{ top: infoPos.top, left: infoPos.left }}
+          onMouseEnter={() => hideTimer.current && clearTimeout(hideTimer.current)}
+          onMouseLeave={() => closeInfoSoon()}
+        >
+          <p className="font-semibold text-foreground">How referrals work</p>
+          <ol className="mt-1.5 list-decimal space-y-1 pl-4 text-muted-foreground">
+            <li>Click the button to copy your personal invite link.</li>
+            <li>Share it — anyone who signs up through that link is credited to you.</li>
+            <li>When their free trial converts into a paid subscription, your next month is free automatically — no code to redeem.</li>
+          </ol>
+        </div>
       )}
-    >
-      {copied ? <Check className="h-4 w-4 shrink-0 text-positive" /> : <Gift className="h-4 w-4 shrink-0 text-muted-foreground" />}
-      {!collapsed && <span>{copied ? "Link copied!" : "Invite & earn a free month"}</span>}
-    </button>
+    </>
   );
 }
 
