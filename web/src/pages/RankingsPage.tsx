@@ -387,7 +387,7 @@ export function RankingsPage() {
     [rankings, activeCategories, activeCategoryMetricCount],
   );
 
-  const scatterData = useMemo<ScatterDatum[]>(() => {
+  const scatterCandidates = useMemo<ScatterDatum[]>(() => {
     return filteredData
       .filter(
         (c): c is typeof c & { latest: { marketCap: number; headlineMetrics: { roic: number; revenueGrowth1y: number } } } =>
@@ -407,6 +407,35 @@ export function RankingsPage() {
         marketCap: c.latest.marketCap,
       }));
   }, [filteredData]);
+
+  /** 0 = no trimming (matches the old, always-on behavior). Otherwise excludes the most extreme
+   * X% of each tail on ROIC or revenue growth so a handful of extreme values don't compress the
+   * rest of the plot into a corner. */
+  const [outlierTrimPct, setOutlierTrimPct] = useState(0);
+  const [outlierPanelOpen, setOutlierPanelOpen] = useState(false);
+
+  const { scatterData, excludedOutliers } = useMemo(() => {
+    if (outlierTrimPct <= 0 || scatterCandidates.length < 10) {
+      return { scatterData: scatterCandidates, excludedOutliers: [] as ScatterDatum[] };
+    }
+    const frac = outlierTrimPct / 100;
+    const percentileValue = (sorted: number[], pct: number) =>
+      sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(pct * (sorted.length - 1))))];
+    const roicSorted = scatterCandidates.map((c) => c.roic).sort((a, b) => a - b);
+    const growthSorted = scatterCandidates.map((c) => c.revenueGrowth1y).sort((a, b) => a - b);
+    const roicLow = percentileValue(roicSorted, frac);
+    const roicHigh = percentileValue(roicSorted, 1 - frac);
+    const growthLow = percentileValue(growthSorted, frac);
+    const growthHigh = percentileValue(growthSorted, 1 - frac);
+
+    const kept: ScatterDatum[] = [];
+    const excluded: ScatterDatum[] = [];
+    for (const c of scatterCandidates) {
+      const isOutlier = c.roic < roicLow || c.roic > roicHigh || c.revenueGrowth1y < growthLow || c.revenueGrowth1y > growthHigh;
+      (isOutlier ? excluded : kept).push(c);
+    }
+    return { scatterData: kept, excludedOutliers: excluded };
+  }, [scatterCandidates, outlierTrimPct]);
 
   const table = useReactTable({
     data: displayData,
@@ -457,10 +486,45 @@ export function RankingsPage() {
         <p className="text-muted-foreground">Sort, filter, and export the full ranked universe.</p>
       </div>
 
-      {scatterData.length > 1 && (
+      {scatterCandidates.length > 1 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>Quality vs. Growth (ROIC × Revenue Growth, sized by market cap)</CardTitle>
+            <div className="flex items-center gap-3 text-xs">
+              <span className="whitespace-nowrap text-muted-foreground">Trim outliers: {outlierTrimPct}%</span>
+              <Slider
+                min={0}
+                max={10}
+                step={0.5}
+                value={outlierTrimPct}
+                onChange={(e) => setOutlierTrimPct(Number(e.target.value))}
+                className="w-28"
+              />
+              {excludedOutliers.length > 0 && (
+                <div
+                  className="relative"
+                  onMouseEnter={() => setOutlierPanelOpen(true)}
+                  onMouseLeave={() => setOutlierPanelOpen(false)}
+                >
+                  <span className="cursor-default whitespace-nowrap rounded-full border border-border bg-surface-muted px-2 py-0.5 text-muted-foreground">
+                    {excludedOutliers.length} removed
+                  </span>
+                  {outlierPanelOpen && (
+                    <div className="absolute right-0 z-20 mt-1 max-h-64 w-64 overflow-y-auto rounded-md border border-border bg-surface p-2 shadow-md">
+                      <p className="mb-1 px-1 text-[11px] font-semibold text-foreground">Removed as outliers</p>
+                      <ul className="space-y-0.5">
+                        {excludedOutliers.map((c) => (
+                          <li key={c.ticker} className="flex items-center justify-between gap-2 rounded px-1 py-0.5 hover:bg-surface-hover">
+                            <span className="font-mono text-accent">{c.ticker}</span>
+                            <span className="truncate text-muted-foreground">{c.companyName}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <QualityGrowthScatter data={scatterData} onSelect={(ticker) => navigate(`/company/${ticker}`)} />
