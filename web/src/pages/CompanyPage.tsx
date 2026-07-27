@@ -13,6 +13,7 @@ import { Slider } from "../components/ui/Slider";
 import { SpiderChart } from "../components/charts/SpiderChart";
 import { HistoryLineChart } from "../components/charts/HistoryLineChart";
 import { IncomeWaterfall } from "../components/charts/IncomeWaterfall";
+import { PriceHistoryChart } from "../components/charts/PriceHistoryChart";
 import { formatCurrency, formatNumber, formatPercent } from "../lib/utils";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -122,6 +123,15 @@ export function CompanyPage() {
           </div>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Price History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PriceHistoryChart points={data.priceHistory} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="pt-5">

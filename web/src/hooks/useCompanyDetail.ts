@@ -6,6 +6,7 @@ import type {
   Company,
   IncomeStatement,
   MetricScore,
+  PriceHistoryPoint,
   RankingResult,
 } from "@proverbs/shared";
 import { db } from "../lib/firebase";
@@ -18,6 +19,7 @@ export interface CompanyDetail {
   cashFlow: CashFlowStatement[];
   metricScoresByPeriod: Array<{ periodKey: string; scores: Record<string, MetricScore> }>;
   historicalRankings: Array<{ date: string; overallScore: number | null; overallRank: number | null }>;
+  priceHistory: PriceHistoryPoint[];
 }
 
 export function useCompanyDetail(ticker: string | undefined) {
@@ -28,18 +30,31 @@ export function useCompanyDetail(ticker: string | undefined) {
       if (!ticker) return null;
       const symbol = ticker.toUpperCase();
 
-      const [companySnap, rankingSnap, incomeSnap, balanceSnap, cashFlowSnap, metricScoresSnap, histRankSnap] =
-        await Promise.all([
-          getDoc(doc(db, "companies", symbol)),
-          getDoc(doc(db, "rankings", "latest", "companies", symbol)),
-          getDocs(query(collection(db, "companies", symbol, "incomeStatements"), orderBy("fiscalYear", "desc"))),
-          getDocs(query(collection(db, "companies", symbol, "balanceSheets"), orderBy("fiscalYear", "desc"))),
-          getDocs(query(collection(db, "companies", symbol, "cashFlowStatements"), orderBy("fiscalYear", "desc"))),
-          getDocs(query(collection(db, "companies", symbol, "metricScores"), orderBy("periodKey", "desc"))),
-          getDocs(query(collection(db, "historicalRankings", symbol, "snapshots"), orderBy("date", "asc"))),
-        ]);
+      const [
+        companySnap,
+        rankingSnap,
+        incomeSnap,
+        balanceSnap,
+        cashFlowSnap,
+        metricScoresSnap,
+        histRankSnap,
+        priceHistorySnap,
+      ] = await Promise.all([
+        getDoc(doc(db, "companies", symbol)),
+        getDoc(doc(db, "rankings", "latest", "companies", symbol)),
+        getDocs(query(collection(db, "companies", symbol, "incomeStatements"), orderBy("fiscalYear", "desc"))),
+        getDocs(query(collection(db, "companies", symbol, "balanceSheets"), orderBy("fiscalYear", "desc"))),
+        getDocs(query(collection(db, "companies", symbol, "cashFlowStatements"), orderBy("fiscalYear", "desc"))),
+        getDocs(query(collection(db, "companies", symbol, "metricScores"), orderBy("periodKey", "desc"))),
+        getDocs(query(collection(db, "historicalRankings", symbol, "snapshots"), orderBy("date", "asc"))),
+        getDoc(doc(db, "companies", symbol, "priceHistory", "daily")),
+      ]);
 
       if (!companySnap.exists()) return null;
+
+      const priceHistoryData = priceHistorySnap.exists()
+        ? (priceHistorySnap.data() as { points: PriceHistoryPoint[] })
+        : null;
 
       return {
         company: companySnap.data() as Company,
@@ -49,6 +64,7 @@ export function useCompanyDetail(ticker: string | undefined) {
         cashFlow: cashFlowSnap.docs.map((d) => d.data() as CashFlowStatement),
         metricScoresByPeriod: metricScoresSnap.docs.map((d) => d.data() as { periodKey: string; scores: Record<string, MetricScore> }),
         historicalRankings: histRankSnap.docs.map((d) => d.data() as { date: string; overallScore: number | null; overallRank: number | null }),
+        priceHistory: [...(priceHistoryData?.points ?? [])].sort((a, b) => a.date.localeCompare(b.date)),
       };
     },
     staleTime: 5 * 60 * 1000,

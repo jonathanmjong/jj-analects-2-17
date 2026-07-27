@@ -215,7 +215,6 @@ export function RankingsPage() {
   const [sorting, setSorting] = usePageState<SortingState>("rankings.sorting", () => [{ id: "latest.overallRank", desc: false }]);
   const [visibility, setVisibility] = usePageState<VisibilityState>("rankings.visibility", {
     industry: false,
-    "latest.sharePrice": false,
     country: false,
   });
 
