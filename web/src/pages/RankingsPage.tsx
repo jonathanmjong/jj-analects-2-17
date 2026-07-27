@@ -18,6 +18,7 @@ import { useCompaniesList } from "../hooks/useCompanies";
 import { useAllRankings } from "../hooks/useAllRankings";
 import { useCustomRankings } from "../hooks/useCustomRankings";
 import { useMetricDefinitions } from "../hooks/useMetricDefinitions";
+import { usePageState } from "../hooks/usePageState";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { Slider } from "../components/ui/Slider";
@@ -181,14 +182,14 @@ export function RankingsPage() {
     setConfig,
     recompute,
     config: customConfig,
-  } = useCustomRankings();
+  } = useCustomRankings("rankings.customConfig");
   const yearsIncluded = customConfig.yearsIncluded;
-  const [metricWeightInputs, setMetricWeightInputs] = useState<Record<string, number>>({});
+  const [metricWeightInputs, setMetricWeightInputs] = usePageState<Record<string, number>>("rankings.metricWeightInputs", {});
   const recomputeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [globalFilter, setGlobalFilter] = usePageState("rankings.globalFilter", "");
   /** Empty set means "no filter" (all sectors/countries shown), matching the old "all" option. */
-  const [sectorFilter, setSectorFilter] = useState<Set<Sector>>(new Set());
-  const [countryFilter, setCountryFilter] = useState<Set<string>>(new Set());
+  const [sectorFilter, setSectorFilter] = usePageState<Set<Sector>>("rankings.sectorFilter", () => new Set());
+  const [countryFilter, setCountryFilter] = usePageState<Set<string>>("rankings.countryFilter", () => new Set());
 
   function toggleSector(sector: Sector) {
     setSectorFilter((prev) => {
@@ -207,12 +208,16 @@ export function RankingsPage() {
       return next;
     });
   }
-  const [minCategoryWeightMetrics, setMinCategoryWeightMetrics] = useState(0);
-  const [valueFilters, setValueFilters] = useState<ValueFilters>(EMPTY_VALUE_FILTERS);
-  const [formulaInput, setFormulaInput] = useState("");
+  const [minCategoryWeightMetrics, setMinCategoryWeightMetrics] = usePageState("rankings.minCategoryWeightMetrics", 0);
+  const [valueFilters, setValueFilters] = usePageState<ValueFilters>("rankings.valueFilters", EMPTY_VALUE_FILTERS);
+  const [formulaInput, setFormulaInput] = usePageState("rankings.formulaInput", "");
   const [formulaHelpOpen, setFormulaHelpOpen] = useState(false);
-  const [sorting, setSorting] = useState<SortingState>([{ id: "latest.overallRank", desc: false }]);
-  const [visibility, setVisibility] = useState<VisibilityState>({ industry: false, "latest.sharePrice": false, country: false });
+  const [sorting, setSorting] = usePageState<SortingState>("rankings.sorting", () => [{ id: "latest.overallRank", desc: false }]);
+  const [visibility, setVisibility] = usePageState<VisibilityState>("rankings.visibility", {
+    industry: false,
+    "latest.sharePrice": false,
+    country: false,
+  });
 
   /** Ticker -> live reranked result, once a category/metric-weight or years-of-data change has recomputed. Null until the first recompute finishes. */
   const customOverrideByTicker = useMemo(() => {
@@ -234,15 +239,16 @@ export function RankingsPage() {
   // Default the "min. category weight data" slider to 60% (rounded up) of
   // the denominator once metric definitions have loaded — can't compute this
   // until then since the denominator is 0 pre-load. Only applies the default
-  // once; later changes (by the user, or from adjusting category weights)
-  // never get silently overridden.
-  const hasSetDefaultMinRef = useRef(false);
+  // once ever per session (persisted, since minCategoryWeightMetrics itself
+  // now survives remounts too — otherwise returning to this page would
+  // silently re-run the default and clobber a value the user picked).
+  const [hasSetDefaultMin, setHasSetDefaultMin] = usePageState("rankings.minCategoryDefaultApplied", false);
   useEffect(() => {
-    if (!hasSetDefaultMinRef.current && activeCategoryMetricCount > 0) {
-      hasSetDefaultMinRef.current = true;
+    if (!hasSetDefaultMin && activeCategoryMetricCount > 0) {
+      setHasSetDefaultMin(true);
       setMinCategoryWeightMetrics(Math.ceil(activeCategoryMetricCount * 0.6));
     }
-  }, [activeCategoryMetricCount]);
+  }, [activeCategoryMetricCount, hasSetDefaultMin, setHasSetDefaultMin, setMinCategoryWeightMetrics]);
 
   function categoryWeightDataAvailable(ticker: string): number {
     // Prefer the live reranked result when one exists — zeroing out a metric's weight in the
@@ -411,7 +417,7 @@ export function RankingsPage() {
   /** 0 = no trimming (matches the old, always-on behavior). Otherwise excludes the most extreme
    * X% of each tail on ROIC or revenue growth so a handful of extreme values don't compress the
    * rest of the plot into a corner. */
-  const [outlierTrimPct, setOutlierTrimPct] = useState(0);
+  const [outlierTrimPct, setOutlierTrimPct] = usePageState("rankings.outlierTrimPct", 0);
   const [outlierPanelOpen, setOutlierPanelOpen] = useState(false);
 
   const { scatterData, excludedOutliers } = useMemo(() => {
