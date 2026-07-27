@@ -1,15 +1,21 @@
 /**
- * Three ascending bars, evenly weighted and unadorned — a mark meant to
- * read as "ranked, compounding, understated" rather than a literal chart
- * icon. Uses currentColor so it always matches the surrounding text
- * (sidebar ink, landing-page header, dark mode) without extra props.
+ * "A" monogram, thin single-stroke geometric letterform whose crossbar
+ * tilts upward into a small terminal dot — a rising trendline built into
+ * the letter itself, rather than a literal bar-chart icon. Uses
+ * currentColor so it always matches the surrounding text (sidebar ink,
+ * landing-page header, dark mode) without extra props.
  */
 export function Logo({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} aria-hidden="true">
-      <rect x="5.5" y="17.5" width="5" height="9" rx="2.5" fill="currentColor" />
-      <rect x="13.5" y="11.5" width="5" height="15" rx="2.5" fill="currentColor" />
-      <rect x="21.5" y="5.5" width="5" height="21" rx="2.5" fill="currentColor" />
+      <path
+        d="M16 5 L6.5 27 M16 5 L25.5 27 M10.5 19 L21 15.5"
+        stroke="currentColor"
+        strokeWidth="2.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="21" cy="15.5" r="1.5" fill="currentColor" />
     </svg>
   );
 }
