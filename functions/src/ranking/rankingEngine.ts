@@ -1,6 +1,7 @@
 import type { MetricYearStats, RankingResult, RankingWeightsConfig } from "@proverbs/shared";
 import { computeCrossSectionalRankings, DEFAULT_RANKING_CONFIG } from "@proverbs/shared";
 import { collections, db } from "../lib/firestore.js";
+import { log } from "../lib/logger.js";
 import { METRIC_DEFINITIONS } from "../metrics/definitions.js";
 import { persistClientRankingExport, type CompanyYearScores } from "./exportUniverseData.js";
 
@@ -52,7 +53,14 @@ export async function computeRankings(
 
   if (persistMetricScores) {
     await persistMetricPercentiles(universe, metricUnitScores, enabledMetrics.map((m) => m.key));
-    await persistClientRankingExport(universe, enabledMetrics.map((m) => m.key));
+    // Best-effort: the client-side-recompute export is a performance optimization, not the
+    // system of record. A failure here (e.g. Storage misconfigured) must never prevent the
+    // nightly job from persisting the actual rankings below it.
+    try {
+      await persistClientRankingExport(universe, enabledMetrics.map((m) => m.key));
+    } catch (err) {
+      log.error("computeRankings: persistClientRankingExport failed, continuing without it", err);
+    }
   }
 
   return results;
