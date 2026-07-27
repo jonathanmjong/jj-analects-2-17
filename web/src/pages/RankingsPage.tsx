@@ -486,10 +486,10 @@ export function RankingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Rankings</h1>
-        <p className="text-muted-foreground">Sort, filter, and export the full ranked universe.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Rankings</h1>
+        <p className="text-sm text-muted-foreground">Sort, filter, and export the full ranked universe.</p>
       </div>
 
       {scatterCandidates.length > 1 && (
@@ -797,15 +797,22 @@ export function RankingsPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-6">
-        <div className="flex min-w-48 items-center gap-2 text-sm">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex h-8 min-w-48 flex-nowrap items-center gap-2 text-sm">
           <span className="whitespace-nowrap text-muted-foreground">
             Years of data: {yearsIncluded} {recomputing && "· recomputing…"}
           </span>
-          <Slider min={1} max={5} step={1} value={yearsIncluded} onChange={(e) => handleYearsChange(Number(e.target.value))} />
+          <Slider
+            min={1}
+            max={5}
+            step={1}
+            value={yearsIncluded}
+            onChange={(e) => handleYearsChange(Number(e.target.value))}
+            className="shrink-0"
+          />
         </div>
 
-        <div className="flex min-w-48 items-center gap-2 text-sm">
+        <div className="flex h-8 min-w-48 flex-nowrap items-center gap-2 text-sm">
           <span className="whitespace-nowrap text-muted-foreground">
             Min. category weight data: {minCategoryWeightMetrics}/{activeCategoryMetricCount}
           </span>
@@ -815,6 +822,7 @@ export function RankingsPage() {
             step={1}
             value={minCategoryWeightMetrics}
             onChange={(e) => setMinCategoryWeightMetrics(Number(e.target.value))}
+            className="shrink-0"
           />
         </div>
       </div>
