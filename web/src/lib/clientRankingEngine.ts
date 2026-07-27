@@ -19,6 +19,9 @@ interface RankingUniverseExport {
  * magic-numbered) — decompress manually via the native DecompressionStream.
  */
 async function decodeExportBytes(bytes: ArrayBuffer): Promise<RankingUniverseExport> {
+  if (bytes.byteLength === 0) {
+    throw new Error("Ranking universe export was empty.");
+  }
   const isGzipMagic = bytes.byteLength > 2 && new Uint8Array(bytes, 0, 2).every((b, i) => b === [0x1f, 0x8b][i]);
   if (!isGzipMagic) {
     return JSON.parse(new TextDecoder().decode(bytes)) as RankingUniverseExport;
@@ -62,6 +65,18 @@ export function loadRankingUniverse(): Promise<{ computedAt: string; universe: U
     });
   }
   return inFlight;
+}
+
+/**
+ * Drops the cached universe fetch. Must be called on sign-out (and on
+ * switching to a different account in the same tab) — otherwise the next
+ * signed-in user on this tab would silently reuse the previous user's
+ * already-fetched (Storage-rules-gated) financial data instead of the
+ * fetch being re-authorized under their own token. See
+ * web/src/context/AuthProvider.tsx.
+ */
+export function clearRankingUniverseCache(): void {
+  inFlight = null;
 }
 
 /** Instant, in-browser twin of functions/src/ranking/rankingEngine.ts's computeRankings — same shared math, no network round-trip. */

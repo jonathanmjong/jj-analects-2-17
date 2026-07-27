@@ -3,6 +3,9 @@ import { signInWithPopup, signOut as firebaseSignOut, onIdTokenChanged, type Use
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db, googleProvider } from "../lib/firebase";
 import { clearStoredReferralCode, getStoredReferralCode } from "../lib/referral";
+import { clearPageState } from "../hooks/usePageState";
+import { clearRankingUniverseCache } from "../lib/clientRankingEngine";
+import { queryClient } from "../lib/queryClient";
 
 interface AuthContextValue {
   user: User | null;
@@ -55,6 +58,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onIdTokenChanged(auth, async (nextUser) => {
       const identityChanged = (nextUser?.uid ?? null) !== previousUid;
       previousUid = nextUser?.uid ?? null;
+
+      // Every cross-session client-side cache is keyed by content, not by uid — sign-out (or
+      // switching to a different account in the same tab) must wipe them, or the next identity
+      // on this tab would silently see the previous user's cached filters/weights/financial data.
+      if (identityChanged) {
+        clearPageState();
+        clearRankingUniverseCache();
+        queryClient.clear();
+      }
 
       // Only show the loading spinner for an actual sign-in/sign-out transition.
       // Setting user and subscribed together (instead of user first, subscribed

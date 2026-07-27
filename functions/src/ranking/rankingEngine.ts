@@ -52,15 +52,17 @@ export async function computeRankings(
   const { results, metricUnitScores } = computeCrossSectionalRankings(universe, METRIC_DEFINITIONS, config);
 
   if (persistMetricScores) {
-    await persistMetricPercentiles(universe, metricUnitScores, enabledMetrics.map((m) => m.key));
+    const metricKeys = enabledMetrics.map((m) => m.key);
     // Best-effort: the client-side-recompute export is a performance optimization, not the
     // system of record. A failure here (e.g. Storage misconfigured) must never prevent the
-    // nightly job from persisting the actual rankings below it.
-    try {
-      await persistClientRankingExport(universe, enabledMetrics.map((m) => m.key));
-    } catch (err) {
+    // nightly job from persisting the actual rankings below it. Independent of
+    // persistMetricPercentiles (both only read universe/metricUnitScores), so run it
+    // concurrently instead of adding its full duration to the job's sequential critical path.
+    const exportDone = persistClientRankingExport(universe, metricKeys).catch((err) => {
       log.error("computeRankings: persistClientRankingExport failed, continuing without it", err);
-    }
+    });
+    await persistMetricPercentiles(universe, metricUnitScores, metricKeys);
+    await exportDone;
   }
 
   return results;

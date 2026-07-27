@@ -533,11 +533,20 @@ export function RankingsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <QualityGrowthScatter data={scatterData} onSelect={(ticker) => navigate(`/company/${ticker}`)} />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Largest {scatterData.length} companies (by market cap) matching the current filters with both metrics
-              available. Colored by sector.
-            </p>
+            {scatterData.length > 0 ? (
+              <>
+                <QualityGrowthScatter data={scatterData} onSelect={(ticker) => navigate(`/company/${ticker}`)} />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Largest {scatterData.length} companies (by market cap) matching the current filters with both
+                  metrics available. Colored by sector.
+                </p>
+              </>
+            ) : (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                The outlier trim removed every company in the current filter — lower the trim percentage above to see
+                the chart again.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

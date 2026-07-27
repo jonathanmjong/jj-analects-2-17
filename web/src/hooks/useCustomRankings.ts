@@ -20,14 +20,7 @@ import { usePageState } from "./usePageState";
  */
 export function useCustomRankings(persistKey?: string) {
   const { data: metricDefinitions } = useMetricDefinitions();
-  // Always the same hook shape regardless of whether persistKey is given (Rules of Hooks) — when
-  // it's absent, fall back to a key unique to this mount, which is equivalent to plain useState
-  // since nothing else will ever read or write that key.
-  const ephemeralKeyRef = useRef(`__ephemeral-${Math.random()}`);
-  const [config, setConfig] = usePageState<RankingWeightsConfig>(
-    persistKey ?? ephemeralKeyRef.current,
-    DEFAULT_RANKING_CONFIG,
-  );
+  const [config, setConfig] = usePageState<RankingWeightsConfig>(persistKey ?? null, DEFAULT_RANKING_CONFIG);
   const [results, setResults] = useState<RankingResult[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,13 +45,16 @@ export function useCustomRankings(persistKey?: string) {
   );
 
   // Restores results for a config carried over from a previous mount (see persistKey above).
-  // Only fires once per mount, and only when there's actually a non-default config to restore.
+  // Captured once, at mount, from the *initial* config value — not the live `config` below —
+  // so a user's own edit later in this same session never re-triggers this effect (it isn't a
+  // "restore" just because config no longer equals the default).
+  const [configAtMount] = useState(config);
   const restoredRef = useRef(false);
   useEffect(() => {
-    if (restoredRef.current || !metricDefinitions || config === DEFAULT_RANKING_CONFIG) return;
+    if (restoredRef.current || !metricDefinitions || configAtMount === DEFAULT_RANKING_CONFIG) return;
     restoredRef.current = true;
-    void recompute(config);
-  }, [metricDefinitions, config, recompute]);
+    void recompute(configAtMount);
+  }, [metricDefinitions, configAtMount, recompute]);
 
   function setYearsIncluded(years: 1 | 2 | 3 | 4 | 5) {
     const next = { ...config, yearsIncluded: years };
