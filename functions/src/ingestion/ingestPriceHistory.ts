@@ -6,9 +6,11 @@ import { computeMomentumFromSeries } from "./computeMomentum.js";
 const yahoo = new YahooFinanceProvider();
 
 /**
- * Fetches a ~2-year daily price series from Yahoo, derives momentum figures
- * from it, and persists both — the compact series (for potential future
- * reuse) and the derived MomentumSnapshot denormalized onto
+ * Fetches a ~1-year daily price series from Yahoo (see getPriceHistory's own
+ * doc comment for why not 2 years — range=2y reliably fails from Cloud
+ * Functions' IPs), derives momentum figures from it, and persists both — the
+ * compact series (for potential future reuse, e.g. the Company page's price
+ * chart) and the derived MomentumSnapshot denormalized onto
  * companies/{ticker}.latest, the same place marketCap/enterpriseValue live,
  * so computeMetricsForCompany can treat momentum like any other
  * current-snapshot input. SEC EDGAR has no price history at all, so unlike
