@@ -120,7 +120,19 @@ const columns: ColumnDef<Company>[] = [
   {
     accessorKey: "latest.sharePrice",
     header: "Price",
-    cell: ({ row }) => formatCurrency(row.original.latest?.sharePrice ?? null),
+    cell: ({ row }) => {
+      const latest = row.original.latest;
+      const formatted = formatCurrency(latest?.sharePrice ?? null);
+      if (latest?.priceSource !== "sec_public_float") return formatted;
+      return (
+        <span
+          className="cursor-help underline decoration-dotted decoration-muted-foreground/50"
+          title={`Approximate — no live quote available, derived from SEC EDGAR's most recent filing (as of ${latest.asOf}), not a current market price.`}
+        >
+          ~{formatted}
+        </span>
+      );
+    },
   },
   {
     id: "peTtm",

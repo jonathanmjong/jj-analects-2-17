@@ -111,7 +111,18 @@ export function CompanyPage() {
         <div className="flex items-center gap-6 text-right">
           <div>
             <div className="text-xs uppercase text-muted-foreground">Price</div>
-            <div className="text-lg font-medium">{formatCurrency(company.latest?.sharePrice ?? null)}</div>
+            <div className="text-lg font-medium">
+              {company.latest?.priceSource === "sec_public_float" ? (
+                <span
+                  className="cursor-help underline decoration-dotted decoration-muted-foreground/50"
+                  title={`Approximate — no live quote available, derived from SEC EDGAR's most recent filing (as of ${company.latest.asOf}), not a current market price.`}
+                >
+                  ~{formatCurrency(company.latest?.sharePrice ?? null)}
+                </span>
+              ) : (
+                formatCurrency(company.latest?.sharePrice ?? null)
+              )}
+            </div>
           </div>
           <div>
             <div className="text-xs uppercase text-muted-foreground">Market Cap</div>

@@ -51,6 +51,14 @@ export interface LatestSnapshot {
   marketCap: number | null;
   enterpriseValue: number | null;
   sharesOutstanding: number | null;
+  /**
+   * "live" when sharePrice/marketCap came from a real-time quote; "sec_public_float" when the
+   * live quote source was unavailable/implausible and ingestion fell back to SEC EDGAR's
+   * EntityPublicFloat (approximate market value as of the most recent 10-K/10-Q cover-page date,
+   * not a live price) — see ingestPrices.ts's resolveQuote. Can lag `asOf` by months in that case,
+   * so the UI must not present it as a current market price without distinguishing the two.
+   */
+  priceSource?: "live" | "sec_public_float";
   overallScore: number | null;
   overallRank: number | null;
   /** Raw P/E, EV/EBITDA, dividend yield, ROIC, FCF yield — see HeadlineMetrics in ranking.ts. Populated by the ranking engine, not price ingestion. */
