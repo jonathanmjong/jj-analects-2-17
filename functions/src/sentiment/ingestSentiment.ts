@@ -1,58 +1,83 @@
+import type { SentimentHeadline, SentimentSourceBreakdown, SentimentSourceId } from "@proverbs/shared";
+import { aggregateSentiment, scoreToDisplayScale } from "@proverbs/shared";
 import { collections } from "../lib/firestore.js";
 import { log } from "../lib/logger.js";
-import { YahooFinanceProvider } from "../providers/YahooFinanceProvider.js";
-import { labelForScore, scoreText, scoreToDisplayScale } from "./scoreText.js";
+import { scoreText } from "./scoreText.js";
+import { ACTIVE_SOURCES } from "./sources/index.js";
 
-const yahoo = new YahooFinanceProvider();
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function summarizeSource(headlines: SentimentHeadline[]): SentimentSourceBreakdown {
+  const rawScores = headlines.map((h) => h.score / 50 - 1); // undo display-scale to average in raw [-1,1] terms
+  const avgRaw = rawScores.reduce((a, b) => a + b, 0) / rawScores.length;
+  return {
+    score: scoreToDisplayScale(avgRaw),
+    articleCount: headlines.length,
+    positiveCount: headlines.filter((h) => h.score / 50 - 1 > 0.15).length,
+    negativeCount: headlines.filter((h) => h.score / 50 - 1 < -0.15).length,
+  };
+}
 
 /**
- * Fetches recent headlines for a ticker, scores each one, and persists both
- * the full detail (companies/{ticker}/sentiment/latest, for the Company
- * page's headline list) and a compact summary denormalized onto
- * companies/{ticker}.latest.sentiment (for the Sentiment ranking table,
- * which reads across the whole universe and can't afford a subcollection
- * read per row) — the same split as price history vs. the momentum
- * snapshot.
+ * Fetches + scores headlines for one ticker from `sourcesToFetch` (a subset,
+ * not necessarily all of ACTIVE_SOURCES — see the GDELT rotation comment in
+ * ingestSentimentForUniverse below), merges with whatever `bySource` data
+ * already exists from sources NOT re-fetched this run (so a ticker skipped
+ * for GDELT this cycle doesn't lose last cycle's GDELT data), and persists
+ * both the full headline detail (companies/{ticker}/sentiment/latest) and
+ * the compact per-source + combined summary denormalized onto
+ * companies/{ticker}.latest.sentiment.
  */
-export async function ingestSentimentForTicker(ticker: string): Promise<{ ok: boolean; error?: string }> {
+export async function ingestSentimentForTicker(
+  ticker: string,
+  sourcesToFetch: SentimentSourceId[] = Object.keys(ACTIVE_SOURCES) as SentimentSourceId[],
+): Promise<{ ok: boolean; error?: string }> {
   const symbol = ticker.toUpperCase();
   try {
-    const news = await yahoo.getNews(symbol);
-    if (!news) return { ok: false, error: "no news available from Yahoo" };
+    const fetched = await Promise.all(
+      sourcesToFetch.map(async (id) => {
+        const source = ACTIVE_SOURCES[id];
+        if (!source) return null;
+        // Defense in depth on top of each source's own error handling: one source throwing
+        // (network failure, unexpected response shape) must never sink this Promise.all and
+        // discard every *other* source's already-successful fetch for this ticker.
+        const raw = await source.fetchHeadlines(symbol, null).catch((err) => {
+          log.warn(`ingestSentimentForTicker: source "${id}" threw for ${symbol}`, err);
+          return null;
+        });
+        if (!raw) return null;
+        const headlines: SentimentHeadline[] = raw.map((h) => ({ ...h, source: id, score: scoreText(h.title).score }));
+        return { id, headlines };
+      }),
+    );
+
+    const existingSnap = await collections.sentiment(symbol).doc("latest").get();
+    const existingHeadlines = (existingSnap.data()?.headlines as SentimentHeadline[] | undefined) ?? [];
+    const untouchedSourceIds = new Set(Object.keys(ACTIVE_SOURCES)) as Set<SentimentSourceId>;
+    for (const id of sourcesToFetch) untouchedSourceIds.delete(id);
+
+    const carriedOverHeadlines = existingHeadlines.filter((h) => untouchedSourceIds.has(h.source));
+    const freshHeadlines = fetched.filter((f): f is NonNullable<typeof f> => f != null).flatMap((f) => f.headlines);
+    const allHeadlines = [...carriedOverHeadlines, ...freshHeadlines].sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
 
     const now = new Date().toISOString();
-    const headlines = news
-      .map((n) => ({ ...n, score: scoreText(n.title).score }))
-      .sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
 
-    if (headlines.length === 0) {
-      // A ticker with genuinely zero recent coverage isn't an error — just nothing to score.
+    if (allHeadlines.length === 0) {
       await collections.company(symbol).set({ latest: { sentiment: null } }, { merge: true });
       return { ok: true };
     }
 
-    const scores = headlines.map((h) => h.score);
-    const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-    const positiveCount = scores.filter((s) => s > 0.15).length;
-    const negativeCount = scores.filter((s) => s < -0.15).length;
+    const bySource: Partial<Record<SentimentSourceId, SentimentSourceBreakdown>> = {};
+    for (const id of new Set(allHeadlines.map((h) => h.source))) {
+      bySource[id] = summarizeSource(allHeadlines.filter((h) => h.source === id));
+    }
+
+    const overall = aggregateSentiment(bySource, Object.keys(bySource) as SentimentSourceId[]);
+    if (!overall) return { ok: true }; // shouldn't happen given allHeadlines.length > 0, but stay defensive
 
     await Promise.all([
-      collections.sentiment(symbol).doc("latest").set({ asOf: now, headlines }),
-      collections.company(symbol).set(
-        {
-          latest: {
-            sentiment: {
-              asOf: now,
-              score: scoreToDisplayScale(avgScore),
-              label: labelForScore(avgScore),
-              articleCount: headlines.length,
-              positiveCount,
-              negativeCount,
-            },
-          },
-        },
-        { merge: true },
-      ),
+      collections.sentiment(symbol).doc("latest").set({ asOf: now, headlines: allHeadlines }),
+      collections.company(symbol).set({ latest: { sentiment: { asOf: now, ...overall, bySource } } }, { merge: true }),
     ]);
 
     return { ok: true };
@@ -62,9 +87,25 @@ export async function ingestSentimentForTicker(ticker: string): Promise<{ ok: bo
   }
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Yahoo and Google News tolerate the same chunked-parallel pacing as the
+ * rest of this app's ingestion. GDELT does not — it asks for one request per
+ * 5 seconds *globally*, which is incompatible with covering hundreds of
+ * tickers inside a single ~540s function invocation (300 tickers x 5s =
+ * 1500s) or with any concurrent fetching at all. So this runs as two
+ * distinct passes rather than one merged loop: Yahoo+Google News first,
+ * chunked and parallel like everything else; then a small rotating slice of
+ * the batch (GDELT_SLICE tickers) gets a true sequential GDELT pass on top,
+ * merging into what the first pass already wrote (ingestSentimentForTicker's
+ * "carry forward untouched sources" logic preserves the rest). Since
+ * sentimentRefresh cycles the full universe continuously, every ticker
+ * eventually gets GDELT coverage too — just refreshed less often than the
+ * other two sources.
+ */
+const GDELT_SLICE = 25;
+const GDELT_GAP_MS = 5500;
+const CHUNK = 5;
 
-/** Same chunked, rate-limited pattern as ingestFundamentalsForUniverse — Yahoo's search endpoint shares the same host as the other unofficial endpoints, so the same conservative pacing applies. */
 export async function ingestSentimentForUniverse(tickers: string[]): Promise<{
   succeeded: string[];
   failed: Array<{ ticker: string; error: string }>;
@@ -72,15 +113,21 @@ export async function ingestSentimentForUniverse(tickers: string[]): Promise<{
   const succeeded: string[] = [];
   const failed: Array<{ ticker: string; error: string }> = [];
 
-  const CHUNK = 5;
   for (let i = 0; i < tickers.length; i += CHUNK) {
     const chunk = tickers.slice(i, i + CHUNK);
-    const results = await Promise.all(chunk.map((t) => ingestSentimentForTicker(t).then((r) => ({ t, r }))));
+    const results = await Promise.all(chunk.map((t) => ingestSentimentForTicker(t, ["yahoo", "google_news"]).then((r) => ({ t, r }))));
     for (const { t, r } of results) {
       if (r.ok) succeeded.push(t);
       else failed.push({ ticker: t, error: r.error ?? "unknown error" });
     }
     await sleep(300);
   }
+
+  for (const ticker of tickers.slice(0, GDELT_SLICE)) {
+    await sleep(GDELT_GAP_MS);
+    const r = await ingestSentimentForTicker(ticker, ["gdelt"]);
+    if (!r.ok) log.warn(`ingestSentimentForUniverse: GDELT pass failed for ${ticker}: ${r.error}`);
+  }
+
   return { succeeded, failed };
 }

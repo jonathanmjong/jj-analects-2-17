@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { DEFAULT_YEAR_WEIGHTS, METRIC_CATEGORIES, type MetricDefinition } from "@proverbs/shared";
+import { aggregateSentiment, DEFAULT_YEAR_WEIGHTS, METRIC_CATEGORIES, type MetricDefinition, type SentimentLabel } from "@proverbs/shared";
 import { useCompanyDetail } from "../hooks/useCompanyDetail";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { useCustomRankings } from "../hooks/useCustomRankings";
 import { useMetricDefinitions } from "../hooks/useMetricDefinitions";
+import { useSentimentSources } from "../hooks/useSentimentSources";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { ScorePill } from "../components/ui/ScorePill";
@@ -14,7 +15,14 @@ import { SpiderChart } from "../components/charts/SpiderChart";
 import { HistoryLineChart } from "../components/charts/HistoryLineChart";
 import { IncomeWaterfall } from "../components/charts/IncomeWaterfall";
 import { PriceHistoryChart } from "../components/charts/PriceHistoryChart";
+import { SentimentSourcePicker } from "../components/sentiment/SentimentSourcePicker";
 import { cn, formatCurrency, formatNumber, formatPercent } from "../lib/utils";
+
+function labelBadgeVariant(label: SentimentLabel): "positive" | "negative" | "neutral" {
+  if (label === "positive") return "positive";
+  if (label === "negative") return "negative";
+  return "neutral";
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
   valuation: "Valuation",
@@ -35,6 +43,7 @@ export function CompanyPage() {
   const { data: peers } = useCompaniesList({ sector: data?.company.sector ?? undefined, limitTo: 5000 });
   const { results, loading: recomputing, setYearsIncluded, recompute } = useCustomRankings();
   const { data: metricDefinitions } = useMetricDefinitions();
+  const { selected: selectedSentimentSources, toggle: toggleSentimentSource } = useSentimentSources();
   const [years, setYears] = useState(5);
 
   const metricsByCategory = useMemo(() => {
@@ -95,6 +104,10 @@ export function CompanyPage() {
 
   const { company } = data;
   const yearColumns = data.metricScoresByPeriod.slice(0, 5);
+  const effectiveSentiment = company.latest?.sentiment
+    ? aggregateSentiment(company.latest.sentiment.bySource, selectedSentimentSources)
+    : null;
+  const visibleHeadlines = data.sentimentHeadlines.filter((h) => selectedSentimentSources.includes(h.source));
 
   return (
     <div className="space-y-8">
@@ -146,29 +159,27 @@ export function CompanyPage() {
 
       {company.latest?.sentiment && (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle>News Sentiment</CardTitle>
             <div className="flex items-center gap-2">
-              <Badge
-                variant={
-                  company.latest.sentiment.label === "positive"
-                    ? "positive"
-                    : company.latest.sentiment.label === "negative"
-                      ? "negative"
-                      : "neutral"
-                }
-                className="capitalize"
-              >
-                {company.latest.sentiment.label}
-              </Badge>
-              <ScorePill score={company.latest.sentiment.score} />
+              <SentimentSourcePicker selected={selectedSentimentSources} onToggle={toggleSentimentSource} />
+              {effectiveSentiment ? (
+                <>
+                  <Badge variant={labelBadgeVariant(effectiveSentiment.label)} className="capitalize">
+                    {effectiveSentiment.label}
+                  </Badge>
+                  <ScorePill score={effectiveSentiment.score} />
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">No data from selected sources</span>
+              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-2 pt-2">
-            {data.sentimentHeadlines.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No recent headline detail available.</p>
+            {visibleHeadlines.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No recent headlines from the selected sources.</p>
             ) : (
-              data.sentimentHeadlines.map((h) => (
+              visibleHeadlines.map((h) => (
                 <a
                   key={h.url}
                   href={h.url}

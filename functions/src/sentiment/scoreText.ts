@@ -1,5 +1,8 @@
-import type { SentimentLabel } from "@proverbs/shared";
 import { NEGATION_WORDS, NEGATIVE_WORDS, POSITIVE_WORDS } from "./lexicon.js";
+
+// scoreToDisplayScale/labelForScore moved to shared/src/sentiment.ts — both this ingestion job
+// and the Sentiment page's client-side source-checkbox recompute need the exact same mapping.
+export { scoreToDisplayScale, labelForScore } from "@proverbs/shared";
 
 const NEGATION_WINDOW = 3;
 
@@ -32,15 +35,4 @@ export function scoreText(text: string): { score: number; matchedPositive: numbe
   const total = positive + negative;
   const score = total === 0 ? 0 : (positive - negative) / total;
   return { score, matchedPositive: positive, matchedNegative: negative };
-}
-
-/** Maps a [-1, 1] score to the app's 0-100 display scale (50 = neutral), matching overallScore's convention. */
-export function scoreToDisplayScale(score: number): number {
-  return (score + 1) * 50;
-}
-
-export function labelForScore(score: number): SentimentLabel {
-  if (score > 0.15) return "positive";
-  if (score < -0.15) return "negative";
-  return "neutral";
 }

@@ -10,13 +10,15 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import type { Company, Sector, SentimentLabel } from "@proverbs/shared";
-import { SECTORS } from "@proverbs/shared";
+import { aggregateSentiment, SECTORS } from "@proverbs/shared";
 import { useCompaniesList } from "../hooks/useCompanies";
+import { useSentimentSources } from "../hooks/useSentimentSources";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { ScorePill } from "../components/ui/ScorePill";
 import { WatchlistButton } from "../components/ui/WatchlistButton";
+import { SentimentSourcePicker } from "../components/sentiment/SentimentSourcePicker";
 import { cn } from "../lib/utils";
 
 const LABEL_FILTERS: Array<{ value: SentimentLabel | "all"; label: string }> = [
@@ -32,7 +34,12 @@ function labelBadgeVariant(label: SentimentLabel): "positive" | "negative" | "ne
   return "neutral";
 }
 
-const columns: ColumnDef<Company>[] = [
+/** Company + its sentiment recomputed from just the currently-selected sources (see useSentimentSources) — null if none of those sources have any data for it. */
+interface RankedCompany extends Company {
+  effective: { score: number; label: SentimentLabel; articleCount: number } | null;
+}
+
+const columns: ColumnDef<RankedCompany>[] = [
   {
     id: "sentimentRank",
     header: "#",
@@ -57,11 +64,11 @@ const columns: ColumnDef<Company>[] = [
     id: "label",
     header: "Sentiment",
     cell: ({ row }) => {
-      const s = row.original.latest?.sentiment;
-      if (!s) return <span className="text-muted-foreground">—</span>;
+      const e = row.original.effective;
+      if (!e) return <span className="text-muted-foreground">—</span>;
       return (
-        <Badge variant={labelBadgeVariant(s.label)} className="capitalize">
-          {s.label}
+        <Badge variant={labelBadgeVariant(e.label)} className="capitalize">
+          {e.label}
         </Badge>
       );
     },
@@ -69,13 +76,13 @@ const columns: ColumnDef<Company>[] = [
   {
     id: "score",
     header: "Score",
-    cell: ({ row }) => <ScorePill score={row.original.latest?.sentiment?.score ?? null} />,
-    sortingFn: (a, b) => (a.original.latest?.sentiment?.score ?? -1) - (b.original.latest?.sentiment?.score ?? -1),
+    cell: ({ row }) => <ScorePill score={row.original.effective?.score ?? null} />,
+    sortingFn: (a, b) => (a.original.effective?.score ?? -1) - (b.original.effective?.score ?? -1),
   },
   {
     id: "articles",
     header: "Articles",
-    cell: ({ row }) => row.original.latest?.sentiment?.articleCount ?? "—",
+    cell: ({ row }) => row.original.effective?.articleCount ?? "—",
   },
   {
     id: "watchlist",
@@ -87,6 +94,7 @@ const columns: ColumnDef<Company>[] = [
 export function SentimentPage() {
   const navigate = useNavigate();
   const { data: companies, isLoading } = useCompaniesList({ limitTo: 5000 });
+  const { selected: selectedSources, toggle: toggleSource } = useSentimentSources();
   const [globalFilter, setGlobalFilter] = useState("");
   const [sectorFilter, setSectorFilter] = useState<Set<Sector>>(new Set());
   const [labelFilter, setLabelFilter] = useState<SentimentLabel | "all">("all");
@@ -103,19 +111,23 @@ export function SentimentPage() {
 
   const { ranked, withoutData } = useMemo(() => {
     const rows = companies ?? [];
-    const withSentiment = rows.filter((c) => c.latest?.sentiment != null);
-    const filtered = withSentiment.filter((c) => {
+    const withEffective: RankedCompany[] = rows.map((c) => ({
+      ...c,
+      effective: c.latest?.sentiment ? aggregateSentiment(c.latest.sentiment.bySource, selectedSources) : null,
+    }));
+    const scored = withEffective.filter((c) => c.effective != null);
+    const filtered = scored.filter((c) => {
       if (sectorFilter.size > 0 && (!c.sector || !sectorFilter.has(c.sector))) return false;
-      if (labelFilter !== "all" && c.latest?.sentiment?.label !== labelFilter) return false;
+      if (labelFilter !== "all" && c.effective?.label !== labelFilter) return false;
       if (globalFilter) {
         const needle = globalFilter.toLowerCase();
         if (!c.ticker.toLowerCase().includes(needle) && !c.companyName.toLowerCase().includes(needle)) return false;
       }
       return true;
     });
-    filtered.sort((a, b) => (b.latest?.sentiment?.score ?? 0) - (a.latest?.sentiment?.score ?? 0));
-    return { ranked: filtered, withoutData: rows.length - withSentiment.length };
-  }, [companies, sectorFilter, labelFilter, globalFilter]);
+    filtered.sort((a, b) => (b.effective?.score ?? 0) - (a.effective?.score ?? 0));
+    return { ranked: filtered, withoutData: rows.length - scored.length };
+  }, [companies, sectorFilter, labelFilter, globalFilter, selectedSources]);
 
   const table = useReactTable({
     data: ranked,
@@ -188,9 +200,11 @@ export function SentimentPage() {
               </details>
             </div>
 
+            <SentimentSourcePicker selected={selectedSources} onToggle={toggleSource} />
+
             <span className="ml-auto text-xs text-muted-foreground">
               {ranked.length} ranked
-              {withoutData > 0 && ` · ${withoutData} not yet scored`}
+              {withoutData > 0 && ` · ${withoutData} not scored by the selected sources`}
             </span>
           </div>
 
