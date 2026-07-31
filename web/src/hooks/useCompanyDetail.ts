@@ -8,6 +8,7 @@ import type {
   MetricScore,
   PriceHistoryPoint,
   RankingResult,
+  SentimentHeadline,
 } from "@proverbs/shared";
 import { db } from "../lib/firebase";
 
@@ -20,6 +21,7 @@ export interface CompanyDetail {
   metricScoresByPeriod: Array<{ periodKey: string; scores: Record<string, MetricScore> }>;
   historicalRankings: Array<{ date: string; overallScore: number | null; overallRank: number | null }>;
   priceHistory: PriceHistoryPoint[];
+  sentimentHeadlines: SentimentHeadline[];
 }
 
 export function useCompanyDetail(ticker: string | undefined) {
@@ -39,6 +41,7 @@ export function useCompanyDetail(ticker: string | undefined) {
         metricScoresSnap,
         histRankSnap,
         priceHistorySnap,
+        sentimentSnap,
       ] = await Promise.all([
         getDoc(doc(db, "companies", symbol)),
         getDoc(doc(db, "rankings", "latest", "companies", symbol)),
@@ -48,6 +51,7 @@ export function useCompanyDetail(ticker: string | undefined) {
         getDocs(query(collection(db, "companies", symbol, "metricScores"), orderBy("periodKey", "desc"))),
         getDocs(query(collection(db, "historicalRankings", symbol, "snapshots"), orderBy("date", "asc"))),
         getDoc(doc(db, "companies", symbol, "priceHistory", "daily")),
+        getDoc(doc(db, "companies", symbol, "sentiment", "latest")),
       ]);
 
       if (!companySnap.exists()) return null;
@@ -55,6 +59,7 @@ export function useCompanyDetail(ticker: string | undefined) {
       const priceHistoryData = priceHistorySnap.exists()
         ? (priceHistorySnap.data() as { points: PriceHistoryPoint[] })
         : null;
+      const sentimentData = sentimentSnap.exists() ? (sentimentSnap.data() as { headlines: SentimentHeadline[] }) : null;
 
       return {
         company: companySnap.data() as Company,
@@ -65,6 +70,7 @@ export function useCompanyDetail(ticker: string | undefined) {
         metricScoresByPeriod: metricScoresSnap.docs.map((d) => d.data() as { periodKey: string; scores: Record<string, MetricScore> }),
         historicalRankings: histRankSnap.docs.map((d) => d.data() as { date: string; overallScore: number | null; overallRank: number | null }),
         priceHistory: [...(priceHistoryData?.points ?? [])].sort((a, b) => a.date.localeCompare(b.date)),
+        sentimentHeadlines: sentimentData?.headlines ?? [],
       };
     },
     staleTime: 5 * 60 * 1000,

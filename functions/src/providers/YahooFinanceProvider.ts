@@ -103,6 +103,34 @@ export class YahooFinanceProvider extends FinancialDataProvider {
     return points.length > 0 ? points : null;
   }
 
+  /**
+   * Recent news headlines for a ticker, via the same unofficial/keyless
+   * family of endpoints as the rest of this provider. Ticker-scoped search
+   * results only, not a general news firehose — used by
+   * functions/src/sentiment/ingestSentiment.ts. Only title/publisher/link/
+   * time are available (no article body/summary), so sentiment scoring here
+   * is necessarily headline-level.
+   */
+  async getNews(ticker: string, count = 12): Promise<Array<{ title: string; publisher: string; url: string; publishedAt: string }> | null> {
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(ticker)}&newsCount=${count}&quotesCount=0`;
+    const res = await fetch(url, { headers: { "User-Agent": this.userAgent, Accept: "application/json" } });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      news?: Array<{ title?: string; publisher?: string; link?: string; providerPublishTime?: number }>;
+    };
+    const news = json.news;
+    if (!news) return null;
+
+    return news
+      .filter((n) => n.title && n.publisher && n.link && n.providerPublishTime)
+      .map((n) => ({
+        title: n.title!,
+        publisher: n.publisher!,
+        url: n.link!,
+        publishedAt: new Date(n.providerPublishTime! * 1000).toISOString(),
+      }));
+  }
+
   private raw(node: unknown): number | null {
     if (node && typeof node === "object" && "raw" in (node as Record<string, unknown>)) {
       const value = (node as Record<string, unknown>).raw;

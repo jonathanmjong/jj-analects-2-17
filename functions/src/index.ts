@@ -4,6 +4,7 @@ export { stripeWebhook } from "./billing/stripeWebhook.js";
 
 export { dailyPriceRefresh } from "./scheduled/dailyPriceRefresh.js";
 export { priceHistoryRefresh } from "./scheduled/priceHistoryRefresh.js";
+export { sentimentRefresh } from "./scheduled/sentimentRefresh.js";
 export { quarterlyStatementRefresh } from "./scheduled/quarterlyStatementRefresh.js";
 export { annualStatementRefresh } from "./scheduled/annualStatementRefresh.js";
 export { sp500MembershipRefresh } from "./scheduled/sp500MembershipRefresh.js";

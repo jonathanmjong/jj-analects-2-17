@@ -13,6 +13,7 @@ export const collections = {
   company: (ticker: string) => db.collection("companies").doc(ticker.toUpperCase()),
   marketData: (ticker: string) => db.collection("companies").doc(ticker.toUpperCase()).collection("marketData"),
   priceHistory: (ticker: string) => db.collection("companies").doc(ticker.toUpperCase()).collection("priceHistory"),
+  sentiment: (ticker: string) => db.collection("companies").doc(ticker.toUpperCase()).collection("sentiment"),
   incomeStatements: (ticker: string) =>
     db.collection("companies").doc(ticker.toUpperCase()).collection("incomeStatements"),
   balanceSheets: (ticker: string) =>

@@ -1,4 +1,5 @@
 import type { MomentumSnapshot } from "./momentum.js";
+import type { SentimentSnapshot } from "./sentiment.js";
 
 export type Sector =
   | "Technology"
@@ -65,6 +66,8 @@ export interface LatestSnapshot {
   headlineMetrics?: HeadlineMetrics;
   /** Populated by ingestPriceHistory.ts, independently of the price/statement refresh cycle. */
   momentum?: MomentumSnapshot;
+  /** Populated by ingestSentiment.ts — lexicon-scored recent news headlines, refreshed independently. */
+  sentiment?: SentimentSnapshot;
 }
 
 export interface HeadlineMetrics {

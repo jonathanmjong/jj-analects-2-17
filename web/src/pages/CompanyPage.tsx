@@ -14,7 +14,7 @@ import { SpiderChart } from "../components/charts/SpiderChart";
 import { HistoryLineChart } from "../components/charts/HistoryLineChart";
 import { IncomeWaterfall } from "../components/charts/IncomeWaterfall";
 import { PriceHistoryChart } from "../components/charts/PriceHistoryChart";
-import { formatCurrency, formatNumber, formatPercent } from "../lib/utils";
+import { cn, formatCurrency, formatNumber, formatPercent } from "../lib/utils";
 
 const CATEGORY_LABELS: Record<string, string> = {
   valuation: "Valuation",
@@ -143,6 +143,58 @@ export function CompanyPage() {
           <PriceHistoryChart points={data.priceHistory} />
         </CardContent>
       </Card>
+
+      {company.latest?.sentiment && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>News Sentiment</CardTitle>
+            <div className="flex items-center gap-2">
+              <Badge
+                variant={
+                  company.latest.sentiment.label === "positive"
+                    ? "positive"
+                    : company.latest.sentiment.label === "negative"
+                      ? "negative"
+                      : "neutral"
+                }
+                className="capitalize"
+              >
+                {company.latest.sentiment.label}
+              </Badge>
+              <ScorePill score={company.latest.sentiment.score} />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2 pt-2">
+            {data.sentimentHeadlines.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No recent headline detail available.</p>
+            ) : (
+              data.sentimentHeadlines.map((h) => (
+                <a
+                  key={h.url}
+                  href={h.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-start justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-surface-hover"
+                >
+                  <span className="flex-1">{h.title}</span>
+                  <span
+                    className={cn(
+                      "shrink-0 whitespace-nowrap text-xs",
+                      h.score > 0.15 ? "text-positive" : h.score < -0.15 ? "text-negative" : "text-muted-foreground",
+                    )}
+                  >
+                    {h.publisher}
+                  </span>
+                </a>
+              ))
+            )}
+            <p className="pt-1 text-xs text-muted-foreground">
+              Scored from headline text via a finance-tuned word lexicon, not an AI/ML model — a directional signal,
+              not a precise measurement.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="pt-5">

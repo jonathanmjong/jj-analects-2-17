@@ -94,7 +94,8 @@ export async function logRefresh(
     | "annual_statements"
     | "sp500_membership"
     | "rankings"
-    | "universe_screening",
+    | "universe_screening"
+    | "sentiment",
   provider: string,
   result: { succeeded: string[]; failed: Array<{ ticker: string; error: string }> },
   startedAt: string,

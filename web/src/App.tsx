@@ -19,6 +19,7 @@ const SectorDetailPage = lazy(() =>
   import("./pages/SectorDetailPage").then((m) => ({ default: m.SectorDetailPage })),
 );
 const WatchlistPage = lazy(() => import("./pages/WatchlistPage").then((m) => ({ default: m.WatchlistPage })));
+const SentimentPage = lazy(() => import("./pages/SentimentPage").then((m) => ({ default: m.SentimentPage })));
 const PreviewPage = lazy(() => import("./pages/PreviewPage").then((m) => ({ default: m.PreviewPage })));
 const ComparisonPage = lazy(() => import("./pages/ComparisonPage").then((m) => ({ default: m.ComparisonPage })));
 
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="/sectors" element={<SectorsOverviewPage />} />
             <Route path="/sectors/:sector" element={<SectorDetailPage />} />
             <Route path="/watchlist" element={<WatchlistPage />} />
+            <Route path="/sentiment" element={<SentimentPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

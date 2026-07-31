@@ -9,6 +9,7 @@ import {
   GitCompare,
   LogOut,
   Menu,
+  Newspaper,
   PieChart,
   Star,
   User as UserIcon,
@@ -21,6 +22,7 @@ import { cn } from "../../lib/utils";
 
 const NAV_LINKS = [
   { to: "/rankings", label: "Rankings", icon: BarChart3 },
+  { to: "/sentiment", label: "Sentiment", icon: Newspaper },
   { to: "/sectors", label: "Sectors", icon: PieChart },
   { to: "/compare", label: "Compare", icon: GitCompare },
   { to: "/watchlist", label: "Watchlist", icon: Star },
