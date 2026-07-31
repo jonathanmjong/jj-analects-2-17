@@ -4,6 +4,8 @@ import { sectorFromSicCode } from "./sicSectorMap.js";
 import { resolveCountry } from "./usStateCodes.js";
 
 interface XbrlFact {
+  /** Present for "duration" concepts (income/cash-flow — value covers a period); absent for "instant" ones (balance-sheet — value as of a single date). */
+  start?: string;
   end: string;
   val: number;
   fy: number;
@@ -113,21 +115,59 @@ export class SecEdgarProvider extends FinancialDataProvider {
     return (await res.json()) as SubmissionJson;
   }
 
-  /** Latest annual (10-K) value per tag, most recent `periods` fiscal years, deduped by fiscal year. */
+  /**
+   * Latest annual (10-K) value per tag, most recent `periods` fiscal years.
+   *
+   * A single 10-K's XBRL data reports the primary current-year figure AND
+   * every comparative period it discloses (prior fiscal years, and for
+   * duration concepts sub-year quarterly breakdowns too) — all sharing the
+   * SAME `fy`/`filed`/`form`, distinguished only by `start`/`end`. SEC's own
+   * `fy` is therefore not a safe dedup/select key: taking "the first fact
+   * for each fy" (the previous implementation) picked whichever comparative
+   * period happened to appear first in the array for that fy. Confirmed in
+   * production: AAPL's stored fy=2024 revenue was $394.3B — actually
+   * FY2022's figure — while the real FY2024 figure ($391.0B) was discarded,
+   * because the FY2022 comparative happened to appear before FY2024's own
+   * figure in the same filing's fact array. This silently mislabels/corrupts
+   * the "most recent years" every year-weighted score depends on.
+   *
+   * Fixed by deduping on `end` date instead (each fiscal period end is
+   * genuinely unique) and merging across tags rather than stopping at the
+   * first non-empty one — companies commonly switch which exact tag they
+   * report a concept under mid-history (e.g. most filers moved from
+   * `Revenues` to `RevenueFromContractWithCustomerExcludingAssessedTax`
+   * around ASC 606 adoption circa 2018), so picking only the first tag with
+   * any data silently truncates the series at that switchover. Duration
+   * facts (has `start`) are also restricted to ~annual-length (350-380 day)
+   * periods so quarterly comparatives aren't mistaken for annual ones;
+   * instant facts (no `start`) need no such filter.
+   */
   private annualSeries(facts: CompanyFacts | null, tags: string[], periods: number): Map<number, number> {
-    const out = new Map<number, number>();
-    if (!facts) return out;
+    if (!facts) return new Map();
+
+    const byEnd = new Map<string, XbrlFact>();
     for (const tag of tags) {
       const units = facts.facts?.["us-gaap"]?.[tag]?.units;
-      const usd = units?.USD ?? units?.["USD/shares"] ?? [];
-      for (const fact of usd) {
+      const raw = units?.USD ?? units?.["USD/shares"] ?? units?.shares ?? [];
+      for (const fact of raw) {
         if (fact.form !== "10-K") continue;
-        if (out.has(fact.fy)) continue;
-        out.set(fact.fy, fact.val);
+        if (fact.start) {
+          const days = (new Date(fact.end).getTime() - new Date(fact.start).getTime()) / 86_400_000;
+          if (days < 350 || days > 380) continue;
+        }
+        const existing = byEnd.get(fact.end);
+        if (!existing || fact.filed > existing.filed) byEnd.set(fact.end, fact);
       }
-      if (out.size >= periods) break;
     }
-    return out;
+
+    const out = new Map<number, number>();
+    for (const fact of [...byEnd.values()].sort((a, b) => a.end.localeCompare(b.end))) {
+      out.set(new Date(fact.end).getUTCFullYear(), fact.val);
+    }
+    // Trim to the most recent `periods` derived fiscal years — topYears() would do this anyway,
+    // but callers other than topYears (e.g. size checks) expect this cap to already hold.
+    const trimmed = new Map([...out.entries()].sort((a, b) => b[0] - a[0]).slice(0, periods));
+    return trimmed;
   }
 
   private topYears(series: Map<number, number>, periods: number): number[] {
@@ -265,11 +305,23 @@ export class SecEdgarProvider extends FinancialDataProvider {
     );
   }
 
+  /**
+   * Sorting by `filed` alone (the previous implementation) breaks: every
+   * comparative period a 10-K discloses shares that filing's single `filed`
+   * date, so a tie-break on `filed` silently falls back to array order and
+   * can return a stale comparative instead of the true latest year (same
+   * root cause as annualSeries' fix above). Restrict to annual-length
+   * duration facts and pick by `end` date instead — genuinely unique.
+   */
   private latestRevenue(facts: CompanyFacts | null): number | null {
     const tags = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"];
     for (const tag of tags) {
-      const facts10k = (facts?.facts?.["us-gaap"]?.[tag]?.units?.USD ?? []).filter((f) => f.form === "10-K");
-      const latest = facts10k.sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
+      const annual = (facts?.facts?.["us-gaap"]?.[tag]?.units?.USD ?? []).filter((f) => {
+        if (f.form !== "10-K" || !f.start) return false;
+        const days = (new Date(f.end).getTime() - new Date(f.start).getTime()) / 86_400_000;
+        return days >= 350 && days <= 380;
+      });
+      const latest = [...annual].sort((a, b) => b.end.localeCompare(a.end))[0];
       if (latest) return latest.val;
     }
     return null;
