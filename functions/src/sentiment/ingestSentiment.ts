@@ -7,14 +7,24 @@ import { ACTIVE_SOURCES } from "./sources/index.js";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function summarizeSource(headlines: SentimentHeadline[]): SentimentSourceBreakdown {
-  const rawScores = headlines.map((h) => h.score / 50 - 1); // undo display-scale to average in raw [-1,1] terms
-  const avgRaw = rawScores.reduce((a, b) => a + b, 0) / rawScores.length;
+/**
+ * headline.score is already raw [-1, 1] (straight from scoreText — see its
+ * type comment), NOT on the 0-100 display scale, so it's averaged directly
+ * here with no unscaling — scoreToDisplayScale is applied exactly once, to
+ * the final averaged result, to produce the SentimentSourceBreakdown.score
+ * that aggregateSentiment expects to already be display-scale. (Caught via
+ * production data: MSFT showed score=0.55 labeled "negative" — internally
+ * inconsistent, traced to this function incorrectly treating an
+ * already-raw headline score as if it needed unscaling, i.e. applying
+ * /50-1 to a number that was never *50+50 in the first place.)
+ */
+export function summarizeSource(headlines: SentimentHeadline[]): SentimentSourceBreakdown {
+  const avgRaw = headlines.reduce((sum, h) => sum + h.score, 0) / headlines.length;
   return {
     score: scoreToDisplayScale(avgRaw),
     articleCount: headlines.length,
-    positiveCount: headlines.filter((h) => h.score / 50 - 1 > 0.15).length,
-    negativeCount: headlines.filter((h) => h.score / 50 - 1 < -0.15).length,
+    positiveCount: headlines.filter((h) => h.score > 0.15).length,
+    negativeCount: headlines.filter((h) => h.score < -0.15).length,
   };
 }
 
