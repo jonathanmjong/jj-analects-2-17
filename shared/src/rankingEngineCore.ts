@@ -24,6 +24,21 @@ export interface RankingComputation {
   metricUnitScores: Map<string, Map<number, MetricYearStats>>;
 }
 
+/** Winsorizes + normalizes one group of same-sign values; 0 = lowest raw value in the group, 1 = highest — not yet direction-adjusted. */
+function unitScores(
+  entries: Array<{ ticker: string; value: number }>,
+  config: RankingWeightsConfig,
+): Array<{ ticker: string; unit: number }> {
+  const winsorized = winsorize(
+    entries.map((e) => e.value),
+    config.winsorizeLowerPct,
+    config.winsorizeUpperPct,
+  );
+  const normalized =
+    config.normalizationMethod === "percentile" ? percentileRanks(winsorized) : zscores(winsorized).map(zscoreToUnitScore);
+  return entries.map((e, idx) => ({ ticker: e.ticker, unit: normalized[idx] }));
+}
+
 function extractHeadlineMetrics(mostRecentYear: Record<string, number | null> | undefined): HeadlineMetrics {
   return {
     peTtm: mostRecentYear?.pe_ttm ?? null,
@@ -69,18 +84,39 @@ export function computeCrossSectionalRankings(
         .filter((e): e is { ticker: string; value: number } => e.value !== null && Number.isFinite(e.value));
       if (entries.length < 2) continue;
 
-      const raw = entries.map((e) => e.value);
-      const winsorized = winsorize(raw, config.winsorizeLowerPct, config.winsorizeUpperPct);
-      const normalized =
-        config.normalizationMethod === "percentile"
-          ? percentileRanks(winsorized)
-          : zscores(winsorized).map(zscoreToUnitScore);
+      const positives = metric.negativeIsBad ? entries.filter((e) => e.value > 0) : entries;
+      const nonPositives = metric.negativeIsBad ? entries.filter((e) => e.value <= 0) : [];
 
       const scoreByTicker = new Map<string, number>();
-      entries.forEach((e, idx) => {
-        const score = metric.direction === "asc" ? 1 - normalized[idx] : normalized[idx];
-        scoreByTicker.set(e.ticker, score);
-      });
+
+      if (nonPositives.length === 0) {
+        // No split needed: either negativeIsBad doesn't apply to this metric, or every
+        // company happens to have a positive value this year — standard single-group scoring.
+        unitScores(positives, config).forEach(({ ticker, unit }) => {
+          scoreByTicker.set(ticker, metric.direction === "asc" ? 1 - unit : unit);
+        });
+      } else if (positives.length === 0) {
+        // Every company is negative this year — no positive group to rank above, but "closer
+        // to zero is less bad" still applies within the group (a smaller loss should still
+        // score better than a larger one), not the metric's normal direction.
+        unitScores(entries, config).forEach(({ ticker, unit }) => {
+          scoreByTicker.set(ticker, unit);
+        });
+      } else {
+        // Every positive-value company must outrank every negative-value one, regardless of
+        // magnitude (a P/E of -50 is a worse company than a P/E of 50, not a "cheaper" one).
+        // Positive group keeps the metric's normal direction and lands in (0.5, 1]; negative
+        // group is scored by closeness to zero (less loss is still less bad) and lands in
+        // [0, 0.5) — the two ranges never overlap.
+        unitScores(positives, config).forEach(({ ticker, unit }) => {
+          const directional = metric.direction === "asc" ? 1 - unit : unit;
+          scoreByTicker.set(ticker, 0.5 + 0.5 * directional);
+        });
+        const NEG_CEILING = 0.5 - 1e-9;
+        unitScores(nonPositives, config).forEach(({ ticker, unit }) => {
+          scoreByTicker.set(ticker, unit * NEG_CEILING);
+        });
+      }
 
       const rankByTicker = new Map<string, number>();
       [...scoreByTicker.entries()]

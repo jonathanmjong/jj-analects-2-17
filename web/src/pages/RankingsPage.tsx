@@ -13,7 +13,7 @@ import {
 } from "@tanstack/react-table";
 import { Download, HelpCircle, SlidersHorizontal } from "lucide-react";
 import type { Company, MetricCategory, Sector } from "@proverbs/shared";
-import { DEFAULT_RANKING_CONFIG, METRIC_CATEGORIES, SECTORS } from "@proverbs/shared";
+import { compareNegativeIsBad, DEFAULT_RANKING_CONFIG, METRIC_CATEGORIES, SECTORS } from "@proverbs/shared";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { useAllRankings } from "../hooks/useAllRankings";
 import { useCustomRankings } from "../hooks/useCustomRankings";
@@ -138,7 +138,8 @@ const columns: ColumnDef<Company>[] = [
     id: "peTtm",
     header: "P/E",
     cell: ({ row }) => formatMultiple(row.original.latest?.headlineMetrics?.peTtm ?? null),
-    sortingFn: (a, b) => (a.original.latest?.headlineMetrics?.peTtm ?? Infinity) - (b.original.latest?.headlineMetrics?.peTtm ?? Infinity),
+    sortingFn: (a, b) =>
+      compareNegativeIsBad(a.original.latest?.headlineMetrics?.peTtm, b.original.latest?.headlineMetrics?.peTtm),
   },
   {
     id: "roic",

@@ -40,6 +40,19 @@ export interface MetricDefinition {
   unit: "ratio" | "percent" | "multiple" | "currency" | "years";
   description: string;
   enabled: boolean;
+  /**
+   * True for ratio metrics where a negative value comes from a negative
+   * denominator (net income, EBITDA, EBIT, equity) rather than being a
+   * continuation of "lower is better" — e.g. a P/E of -50 (deep losses)
+   * isn't a cheaper stock than a P/E of 5, it's a fundamentally worse one.
+   * When set, every negative-value company ranks below every positive-value
+   * company for this metric+year, regardless of magnitude; only within each
+   * sign group does normal "asc" ordering apply (and within the negative
+   * group, closer-to-zero — i.e. a smaller loss — still ranks better than a
+   * larger one). Leave unset for metrics where negative is intentionally
+   * the good end (e.g. share buybacks shrinking share count) or can't occur.
+   */
+  negativeIsBad?: boolean;
 }
 
 /** One metric's computed value for a single company + period, pre-ranking. */

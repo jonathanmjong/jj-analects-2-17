@@ -18,13 +18,13 @@ interface MetricEntry {
 
 const entries: MetricEntry[] = [
   // --- Valuation ---
-  { definition: { key: "ev_fcf", label: "EV / Free Cash Flow", category: "valuation", direction: "asc", unit: "multiple", description: "Enterprise value divided by free cash flow.", enabled: true }, calculator: valuation.evToFcf },
-  { definition: { key: "ev_ebit", label: "EV / EBIT", category: "valuation", direction: "asc", unit: "multiple", description: "Enterprise value divided by EBIT.", enabled: true }, calculator: valuation.evToEbit },
-  { definition: { key: "ev_ebitda", label: "EV / EBITDA", category: "valuation", direction: "asc", unit: "multiple", description: "Enterprise value divided by EBITDA.", enabled: true }, calculator: valuation.evToEbitda },
-  { definition: { key: "pe_ttm", label: "P/E (TTM)", category: "valuation", direction: "asc", unit: "multiple", description: "Market cap divided by trailing net income.", enabled: true }, calculator: valuation.peTtm },
-  { definition: { key: "pb", label: "P/B", category: "valuation", direction: "asc", unit: "multiple", description: "Market cap divided by book value of equity.", enabled: true }, calculator: valuation.priceToBook },
-  { definition: { key: "ps", label: "P/S", category: "valuation", direction: "asc", unit: "multiple", description: "Market cap divided by revenue.", enabled: true }, calculator: valuation.priceToSales },
-  { definition: { key: "price_tangible_book", label: "Price / Tangible Book", category: "valuation", direction: "asc", unit: "multiple", description: "Market cap divided by tangible book value.", enabled: true }, calculator: valuation.priceToTangibleBook },
+  { definition: { key: "ev_fcf", label: "EV / Free Cash Flow", category: "valuation", direction: "asc", unit: "multiple", description: "Enterprise value divided by free cash flow.", enabled: true, negativeIsBad: true }, calculator: valuation.evToFcf },
+  { definition: { key: "ev_ebit", label: "EV / EBIT", category: "valuation", direction: "asc", unit: "multiple", description: "Enterprise value divided by EBIT.", enabled: true, negativeIsBad: true }, calculator: valuation.evToEbit },
+  { definition: { key: "ev_ebitda", label: "EV / EBITDA", category: "valuation", direction: "asc", unit: "multiple", description: "Enterprise value divided by EBITDA.", enabled: true, negativeIsBad: true }, calculator: valuation.evToEbitda },
+  { definition: { key: "pe_ttm", label: "P/E (TTM)", category: "valuation", direction: "asc", unit: "multiple", description: "Market cap divided by trailing net income.", enabled: true, negativeIsBad: true }, calculator: valuation.peTtm },
+  { definition: { key: "pb", label: "P/B", category: "valuation", direction: "asc", unit: "multiple", description: "Market cap divided by book value of equity.", enabled: true, negativeIsBad: true }, calculator: valuation.priceToBook },
+  { definition: { key: "ps", label: "P/S", category: "valuation", direction: "asc", unit: "multiple", description: "Market cap divided by revenue.", enabled: true, negativeIsBad: true }, calculator: valuation.priceToSales },
+  { definition: { key: "price_tangible_book", label: "Price / Tangible Book", category: "valuation", direction: "asc", unit: "multiple", description: "Market cap divided by tangible book value.", enabled: true, negativeIsBad: true }, calculator: valuation.priceToTangibleBook },
   { definition: { key: "earnings_yield", label: "Earnings Yield", category: "valuation", direction: "desc", unit: "percent", description: "EBIT divided by enterprise value.", enabled: true }, calculator: valuation.earningsYield },
   { definition: { key: "fcf_yield", label: "FCF Yield", category: "valuation", direction: "desc", unit: "percent", description: "Free cash flow divided by market cap.", enabled: true }, calculator: valuation.fcfYield },
   { definition: { key: "shareholder_yield_valuation", label: "Shareholder Yield", category: "valuation", direction: "desc", unit: "percent", description: "Dividends + buybacks - issuance, divided by market cap.", enabled: true }, calculator: valuation.shareholderYield },
@@ -52,11 +52,11 @@ const entries: MetricEntry[] = [
   // --- Financial Strength ---
   { definition: { key: "cash_to_market_cap", label: "Cash / Market Cap", category: "financialStrength", direction: "desc", unit: "percent", description: "Cash and equivalents divided by market cap.", enabled: true }, calculator: financialStrength.cashToMarketCap },
   { definition: { key: "net_cash_to_market_cap", label: "Net Cash / Market Cap", category: "financialStrength", direction: "desc", unit: "percent", description: "(Cash - total debt) divided by market cap.", enabled: true }, calculator: financialStrength.netCashToMarketCap },
-  { definition: { key: "debt_to_equity", label: "Debt / Equity", category: "financialStrength", direction: "asc", unit: "ratio", description: "Total debt divided by total equity.", enabled: true }, calculator: financialStrength.debtToEquity },
+  { definition: { key: "debt_to_equity", label: "Debt / Equity", category: "financialStrength", direction: "asc", unit: "ratio", description: "Total debt divided by total equity.", enabled: true, negativeIsBad: true }, calculator: financialStrength.debtToEquity },
   { definition: { key: "current_ratio", label: "Current Ratio", category: "financialStrength", direction: "desc", unit: "ratio", description: "Current assets divided by current liabilities.", enabled: true }, calculator: financialStrength.currentRatio },
   { definition: { key: "quick_ratio", label: "Quick Ratio", category: "financialStrength", direction: "desc", unit: "ratio", description: "(Current assets - inventory) divided by current liabilities.", enabled: true }, calculator: financialStrength.quickRatio },
   { definition: { key: "interest_coverage", label: "Interest Coverage", category: "financialStrength", direction: "desc", unit: "ratio", description: "EBIT divided by interest expense.", enabled: true }, calculator: financialStrength.interestCoverage },
-  { definition: { key: "debt_to_ebitda", label: "Debt / EBITDA", category: "financialStrength", direction: "asc", unit: "ratio", description: "Total debt divided by EBITDA.", enabled: true }, calculator: financialStrength.debtToEbitda },
+  { definition: { key: "debt_to_ebitda", label: "Debt / EBITDA", category: "financialStrength", direction: "asc", unit: "ratio", description: "Total debt divided by EBITDA.", enabled: true, negativeIsBad: true }, calculator: financialStrength.debtToEbitda },
   { definition: { key: "debt_maturity_mix", label: "Debt Maturity Mix", category: "financialStrength", direction: "desc", unit: "percent", description: "Share of total debt that is long-term (proxy for maturity/refinancing risk).", enabled: true }, calculator: financialStrength.debtMaturityMix },
 
   // --- Capital Allocation ---

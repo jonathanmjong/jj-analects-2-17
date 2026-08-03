@@ -13,6 +13,23 @@ export function winsorize(values: number[], lowerPct: number, upperPct: number):
   return values.map((v) => Math.min(Math.max(v, lowerBound), upperBound));
 }
 
+/**
+ * Ascending comparator for "negativeIsBad" ratio metrics (see MetricDefinition) outside the
+ * main ranking engine — e.g. a raw UI table column sort. Positive values always sort before
+ * negative ones (ascending within each: lowest positive first, then closest-to-zero negative
+ * first), and missing values always sort last. Mirrors the split-group logic in
+ * computeCrossSectionalRankings so a manual column sort agrees with the computed ranking.
+ */
+export function compareNegativeIsBad(a: number | null | undefined, b: number | null | undefined): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  const aBad = a <= 0;
+  const bBad = b <= 0;
+  if (aBad !== bBad) return aBad ? 1 : -1;
+  return aBad ? b - a : a - b;
+}
+
 /** Percentile rank (0-1) of each value within the peer set, order-preserved with input. */
 export function percentileRanks(values: number[]): number[] {
   const n = values.length;
