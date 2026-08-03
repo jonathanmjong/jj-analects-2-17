@@ -10,21 +10,27 @@ const USER_AGENT = "Analects217 research app (contact: jonathanmjong@gmail.com)"
  * try/catch by the scheduled job so a parse failure never takes down the
  * rest of the daily refresh pipeline.
  */
+export function parseSp500Html(html: string): string[] {
+  const tableMatch = html.match(/<table[^>]*id="constituents"[\s\S]*?<\/table>/);
+  if (!tableMatch) throw new Error("constituents table not found in Wikipedia page");
+
+  // Wikipedia's row/cell tags carry generated id attributes (e.g. <tr id="mwLQ">,
+  // <td id="mwLg">) rather than being bare — matched loosely here so a future
+  // attribute change doesn't silently zero out every row again.
+  const rows = [...tableMatch[0].matchAll(/<tr[^>]*>[\s\S]*?<\/tr>/g)];
+  const tickers: string[] = [];
+  for (const row of rows) {
+    const cellMatch = row[0].match(/<td[^>]*><a[^>]*>([A-Z.\-]+)<\/a><\/td>/);
+    if (cellMatch) tickers.push(cellMatch[1]);
+  }
+  return tickers;
+}
+
 export async function fetchSp500Tickers(): Promise<string[]> {
   const res = await fetch(WIKI_URL, { headers: { "User-Agent": USER_AGENT } });
   if (!res.ok) throw new Error(`Wikipedia fetch failed: ${res.status}`);
   const html = await res.text();
-
-  const tableMatch = html.match(/<table[^>]*id="constituents"[\s\S]*?<\/table>/);
-  if (!tableMatch) throw new Error("constituents table not found in Wikipedia page");
-
-  const rows = [...tableMatch[0].matchAll(/<tr>[\s\S]*?<\/tr>/g)];
-  const tickers: string[] = [];
-  for (const row of rows) {
-    const cellMatch = row[0].match(/<td><a[^>]*>([A-Z.\-]+)<\/a><\/td>/);
-    if (cellMatch) tickers.push(cellMatch[1]);
-  }
-  return tickers;
+  return parseSp500Html(html);
 }
 
 export async function refreshSp500Membership(): Promise<{ succeeded: string[]; failed: Array<{ ticker: string; error: string }> }> {
