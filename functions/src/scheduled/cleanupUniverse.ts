@@ -53,9 +53,14 @@ function pickPrimaryTicker(tickers: string[]): string {
  *     shouldn't be ranked alongside operating companies.
  * Safe to run repeatedly (idempotent) — scheduled as an ongoing guard, not
  * just a one-off migration, since SEC could add new same-CIK tickers later.
+ * 1GiB (not the 512MiB most scheduled jobs use): loads the whole companies
+ * collection into memory up front, then can trigger a full
+ * computeRankings/persistRankings pass on top — crashed with an OOM at 526MiB
+ * once the universe grew past ~1,300 companies. Matches recomputeRankings,
+ * which does the same ranking pass and is already provisioned at 1GiB.
  */
 export const cleanupUniverse = onSchedule(
-  { schedule: "every 24 hours", timeoutSeconds: 540, memory: "512MiB" },
+  { schedule: "every 24 hours", timeoutSeconds: 540, memory: "1GiB" },
   async () => {
     const startedAt = new Date().toISOString();
     const companiesSnap = await collections.companies().get();
