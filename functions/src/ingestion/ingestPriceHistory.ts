@@ -49,8 +49,19 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * time at a 350ms gap, while this one got HTTP 429 on nearly every request
  * at a 450ms gap. No immediate same-ticker retry: retrying into an active
  * 429 window just spends another request without helping, so a failed
- * ticker is simply left for the next hourly invocation (whose cursor will
+ * ticker is simply left for the next invocation (whose cursor will
  * eventually cycle back to it) rather than compounding the throttling here.
+ *
+ * As of 2026-08-04, this endpoint had degraded to a ~100% failure rate for
+ * 5+ days straight even at a 2s gap — confirmed via direct testing that a
+ * completely different network also gets HTTP 429 from the same endpoint
+ * after just a handful of requests, so this isn't purely a Cloud Functions
+ * IP problem, and reducing volume here isn't guaranteed to fix it (Cloud
+ * Functions' egress IP pool is shared with other tenants' traffic). Gap
+ * widened to 4s and priceHistoryRefresh's batch/schedule both cut (see that
+ * file) as a best-effort, no-cost attempt to lighten this app's own
+ * contribution to whatever load tripped the block, in case it's usage-based
+ * and can decay over time.
  */
 export async function ingestPriceHistoryForUniverse(tickers: string[]) {
   const succeeded: string[] = [];
@@ -60,7 +71,7 @@ export async function ingestPriceHistoryForUniverse(tickers: string[]) {
     const result = await ingestPriceHistoryForTicker(ticker);
     if (result.ok) succeeded.push(ticker);
     else failed.push({ ticker, error: result.error ?? "unknown error" });
-    await sleep(2000);
+    await sleep(4000);
   }
   return { succeeded, failed };
 }
