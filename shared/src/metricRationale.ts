@@ -1,10 +1,12 @@
-import type { MetricCategory } from "@proverbs/shared";
+import type { MetricCategory } from "./metrics.js";
 
 /**
- * Value-investing commentary for the metric registry — admin-only explanatory content, kept
- * separate from MetricDefinition (shared/src/metrics.ts) deliberately: MetricDefinition flows
- * into the ranking export every subscriber's browser fetches every session, so it stays lean;
- * this file is only ever imported by the admin Value Metrics panel.
+ * Value-investing commentary for the metric registry — admin-only explanatory content. Kept as
+ * its own module rather than fields on MetricDefinition (metrics.ts) since MetricDefinition
+ * flows into the ranking export every subscriber's browser fetches every session and should
+ * stay lean; this content is only ever imported by the admin Value Metrics panel and by
+ * functions/test's registry-alignment test (see metricRegistryValueInvesting.test.ts), which is
+ * why it lives in shared/ rather than web/ despite being UI-only content.
  */
 
 export type MetricVerdict = "core" | "supporting" | "caveat" | "not-value-investing";
@@ -73,6 +75,21 @@ export interface MetricRationaleEntry {
 }
 
 export const METRIC_RATIONALE: Record<string, MetricRationaleEntry> = {
+  // --- Momentum (not value investing — see category summary above) ---
+  momentum_12m1m: {
+    verdict: "not-value-investing",
+    rationale:
+      "The classic academic momentum factor (Jegadeesh & Titman) — buys recent winners. A real, persistent anomaly, but the opposite instinct to value investing's \"buy what's out of favor.\" 0% default weight.",
+  },
+  momentum_risk_adj_3m: {
+    verdict: "not-value-investing",
+    rationale: "Same momentum logic as 12-1 month, adjusted for volatility over a much shorter window — noisier, and still not a value signal. 0% default weight.",
+  },
+  momentum_risk_adj_6m: {
+    verdict: "not-value-investing",
+    rationale: "Same as 3-month risk-adjusted momentum with a longer, somewhat less noisy lookback — still a trend-following factor, not a value one. 0% default weight.",
+  },
+
   // --- Valuation ---
   ev_fcf: {
     verdict: "core",

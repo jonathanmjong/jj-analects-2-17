@@ -1,6 +1,7 @@
 export * from "./company.js";
 export * from "./financials.js";
 export * from "./metrics.js";
+export * from "./metricRationale.js";
 export * from "./momentum.js";
 export * from "./ranking.js";
 export * from "./rankingEngineCore.js";

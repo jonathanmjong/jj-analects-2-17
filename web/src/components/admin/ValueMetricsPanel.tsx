@@ -1,10 +1,15 @@
-import type { MetricCategory, MetricDefinition } from "@proverbs/shared";
-import { DEFAULT_CATEGORY_WEIGHTS, METRIC_CATEGORIES } from "@proverbs/shared";
+import type { MetricCategory, MetricDefinition, MetricVerdict } from "@proverbs/shared";
+import {
+  CATEGORY_RATIONALE,
+  DEFAULT_CATEGORY_WEIGHTS,
+  getMetricRationale,
+  GROWTH_HORIZON_NOTE,
+  METRIC_CATEGORIES,
+} from "@proverbs/shared";
 import { useMetricDefinitions } from "../../hooks/useMetricDefinitions";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/Card";
 import { Badge, type BadgeProps } from "../ui/Badge";
 import { Spinner } from "../ui/Spinner";
-import { CATEGORY_RATIONALE, GROWTH_HORIZON_NOTE, getMetricRationale, type MetricVerdict } from "../../lib/metricRationale";
 
 const CATEGORY_LABELS: Record<MetricCategory, string> = {
   valuation: "Valuation",
