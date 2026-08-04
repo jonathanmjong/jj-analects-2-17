@@ -3,17 +3,17 @@ import { httpsCallable } from "firebase/functions";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthProvider";
 import { functions } from "../lib/firebase";
+import { isAdminEmail } from "../lib/admin";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
-
-const ADMIN_EMAILS = ["jonathanmjong@gmail.com"];
+import { ValueMetricsPanel } from "../components/admin/ValueMetricsPanel";
 
 export function AdminPage() {
   const { user } = useAuth();
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (!user || !ADMIN_EMAILS.includes(user.email ?? "")) {
+  if (!isAdminEmail(user?.email)) {
     return <Navigate to="/" replace />;
   }
 
@@ -32,9 +32,9 @@ export function AdminPage() {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <h1 className="text-2xl font-semibold">Admin tools</h1>
-      <Card>
+    <div className="mx-auto max-w-4xl space-y-6">
+      <h1 className="text-2xl font-semibold">Admin</h1>
+      <Card className="max-w-xl">
         <CardHeader>
           <CardTitle>One-time / operational jobs</CardTitle>
         </CardHeader>
@@ -48,6 +48,7 @@ export function AdminPage() {
           {status && <p className="whitespace-pre-wrap text-sm text-muted-foreground">{status}</p>}
         </CardContent>
       </Card>
+      <ValueMetricsPanel />
     </div>
   );
 }

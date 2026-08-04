@@ -11,6 +11,7 @@ import {
   Menu,
   Newspaper,
   PieChart,
+  ShieldCheck,
   Star,
   User as UserIcon,
   X,
@@ -18,6 +19,7 @@ import {
 import { useAuth } from "../../context/AuthProvider";
 import { Logo } from "../ui/Logo";
 import { referralLinkFor } from "../../lib/referral";
+import { isAdminEmail } from "../../lib/admin";
 import { cn } from "../../lib/utils";
 
 const NAV_LINKS = [
@@ -157,25 +159,27 @@ function SidebarContent({ onNavigate, collapsed = false, onToggleCollapse }: Sid
       )}
 
       <nav className="mt-4 flex flex-col gap-0.5">
-        {NAV_LINKS.map((link) => (
-          <NavLink
-            key={link.to}
-            to={link.to}
-            end
-            onClick={onNavigate}
-            title={collapsed ? link.label : undefined}
-            className={({ isActive }: { isActive: boolean }) =>
-              cn(
-                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground/80 transition-colors hover:bg-surface-hover",
-                collapsed && "justify-center",
-                isActive && "bg-surface-hover font-medium text-foreground",
-              )
-            }
-          >
-            <link.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            {!collapsed && link.label}
-          </NavLink>
-        ))}
+        {[...NAV_LINKS, ...(isAdminEmail(user?.email) ? [{ to: "/admin", label: "Admin", icon: ShieldCheck }] : [])].map(
+          (link) => (
+            <NavLink
+              key={link.to}
+              to={link.to}
+              end
+              onClick={onNavigate}
+              title={collapsed ? link.label : undefined}
+              className={({ isActive }: { isActive: boolean }) =>
+                cn(
+                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground/80 transition-colors hover:bg-surface-hover",
+                  collapsed && "justify-center",
+                  isActive && "bg-surface-hover font-medium text-foreground",
+                )
+              }
+            >
+              <link.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              {!collapsed && link.label}
+            </NavLink>
+          ),
+        )}
         {user && <ReferralButton uid={user.uid} collapsed={collapsed} />}
       </nav>
 
