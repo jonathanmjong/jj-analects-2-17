@@ -426,10 +426,11 @@ export function RankingsPage() {
       }));
   }, [filteredData]);
 
-  /** 0 = no trimming (matches the old, always-on behavior). Otherwise excludes the most extreme
-   * X% of each tail on ROIC or revenue growth so a handful of extreme values don't compress the
-   * rest of the plot into a corner. */
-  const [outlierTrimPct, setOutlierTrimPct] = usePageState("rankings.outlierTrimPct", 0);
+  /** 0 = no trimming. Otherwise excludes the most extreme X% of each tail on ROIC or revenue
+   * growth so a handful of extreme values don't compress the rest of the plot into a corner.
+   * Defaults to 4% (rather than the old always-on-until-changed 0%) since a few extreme
+   * ROIC/growth outliers routinely compressed the chart before a user discovered the slider. */
+  const [outlierTrimPct, setOutlierTrimPct] = usePageState("rankings.outlierTrimPct", 4);
   const [outlierPanelOpen, setOutlierPanelOpen] = useState(false);
 
   const { scatterData, excludedOutliers } = useMemo(() => {
