@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   flexRender,
   getCoreRowModel,
@@ -26,6 +26,7 @@ import { ScorePill } from "../components/ui/ScorePill";
 import { WatchlistButton } from "../components/ui/WatchlistButton";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { QualityGrowthScatter, type ScatterDatum } from "../components/charts/QualityGrowthScatter";
+import { TickerHoverLink } from "../components/rankings/TickerHoverLink";
 import { formatCurrency, formatMultiple, formatPercent } from "../lib/utils";
 import { exportRowsAsCsv, exportRowsAsJson, exportRowsAsXlsx } from "../lib/exporters";
 import { evaluateFormula, FormulaError, parseFormula, type FormulaContext } from "../lib/formulaFilter";
@@ -97,15 +98,7 @@ const columns: ColumnDef<Company>[] = [
   {
     accessorKey: "ticker",
     header: "Ticker",
-    cell: ({ row }) => (
-      <Link
-        to={`/company/${row.original.ticker}`}
-        onClick={(e) => e.stopPropagation()}
-        className="font-medium hover:text-accent"
-      >
-        {row.original.ticker}
-      </Link>
-    ),
+    cell: ({ row }) => <TickerHoverLink company={row.original} />,
   },
   { accessorKey: "companyName", header: "Company" },
   { accessorKey: "sector", header: "Sector", cell: ({ getValue }) => getValue<string>() ?? "—" },
