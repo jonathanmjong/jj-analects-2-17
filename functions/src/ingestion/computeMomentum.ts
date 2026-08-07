@@ -2,6 +2,10 @@ import type { MomentumSnapshot, PriceHistoryPoint } from "@proverbs/shared";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MIN_POINTS_FOR_RISK_ADJUSTED = 15; // roughly 3 trading weeks; below this, volatility is too noisy to trust
+/** Trading days averaged at each measurement boundary — smooths out a single anomalous or stale
+ * data point landing exactly on the boundary distorting an entire momentum reading. Comfortably
+ * below MIN_POINTS_FOR_RISK_ADJUSTED so the two edges of a risk-adjusted window never overlap. */
+const SMOOTHING_WINDOW_DAYS = 5;
 
 function monthsAgo(from: Date, months: number): Date {
   const d = new Date(from);
@@ -9,18 +13,24 @@ function monthsAgo(from: Date, months: number): Date {
   return d;
 }
 
-/** Closest point on or before `target`, falling back to the earliest point if the series doesn't reach back that far. */
-function priceAsOf(points: PriceHistoryPoint[], target: Date): PriceHistoryPoint | null {
+function average(points: PriceHistoryPoint[]): number | null {
+  if (points.length === 0) return null;
+  return points.reduce((sum, p) => sum + p.close, 0) / points.length;
+}
+
+/**
+ * Average close over the trailing `windowDays` trading days on or before `target`, not a single
+ * day's raw close — one volatile or erroneous print landing exactly on a measurement boundary
+ * (e.g. "12 months ago") shouldn't swing the whole momentum reading. Falls back to the earliest
+ * point(s) available if the series doesn't reach back that far, same as a plain nearest-point
+ * lookup would.
+ */
+function smoothedCloseAsOf(points: PriceHistoryPoint[], target: Date, windowDays = SMOOTHING_WINDOW_DAYS): number | null {
   if (points.length === 0) return null;
   const targetMs = target.getTime();
-  let best: PriceHistoryPoint | null = null;
-  for (const p of points) {
-    const ms = new Date(p.date).getTime();
-    if (ms <= targetMs) {
-      if (!best || ms > new Date(best.date).getTime()) best = p;
-    }
-  }
-  return best ?? points[0]; // series doesn't reach back this far — use the earliest point available
+  const upToTarget = points.filter((p) => new Date(p.date).getTime() <= targetMs);
+  const window = (upToTarget.length > 0 ? upToTarget : points.slice(0, 1)).slice(-windowDays);
+  return average(window);
 }
 
 function simpleReturns(points: PriceHistoryPoint[]): number[] {
@@ -43,9 +53,9 @@ function stddevSample(values: number[]): number | null {
 function riskAdjustedReturn(points: PriceHistoryPoint[], windowStart: Date): number | null {
   const window = points.filter((p) => new Date(p.date).getTime() >= windowStart.getTime());
   if (window.length < MIN_POINTS_FOR_RISK_ADJUSTED) return null;
-  const first = window[0].close;
-  const last = window[window.length - 1].close;
-  if (first <= 0) return null;
+  const first = average(window.slice(0, SMOOTHING_WINDOW_DAYS));
+  const last = average(window.slice(-SMOOTHING_WINDOW_DAYS));
+  if (first === null || last === null || first <= 0) return null;
   const cumulativeReturn = last / first - 1;
   const volatility = stddevSample(simpleReturns(window));
   if (volatility === null || volatility === 0) return null;
@@ -65,16 +75,14 @@ export function computeMomentumFromSeries(rawPoints: PriceHistoryPoint[]): Momen
   const latest = points[points.length - 1];
   const latestDate = new Date(latest.date);
 
-  const price1moAgo = priceAsOf(points, monthsAgo(latestDate, 1));
-  const price12moAgo = priceAsOf(points, monthsAgo(latestDate, 12));
+  const price1moAgo = smoothedCloseAsOf(points, monthsAgo(latestDate, 1));
+  const price12moAgo = smoothedCloseAsOf(points, monthsAgo(latestDate, 12));
   // Require the series to actually span ~12 months (with slack for weekends/holidays around the
   // boundary) — otherwise price12moAgo silently falls back to the earliest point and produces a
   // return over a much shorter, misleadingly-labeled window.
   const spansYear = latestDate.getTime() - new Date(points[0].date).getTime() >= 335 * DAY_MS;
   const return12m1m =
-    spansYear && price1moAgo && price12moAgo && price12moAgo.close > 0
-      ? price1moAgo.close / price12moAgo.close - 1
-      : null;
+    spansYear && price1moAgo !== null && price12moAgo !== null && price12moAgo > 0 ? price1moAgo / price12moAgo - 1 : null;
 
   return {
     return12m1m,
