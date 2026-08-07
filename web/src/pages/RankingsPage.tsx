@@ -27,6 +27,7 @@ import { WatchlistButton } from "../components/ui/WatchlistButton";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { QualityGrowthScatter, type ScatterDatum } from "../components/charts/QualityGrowthScatter";
 import { TickerHoverLink } from "../components/rankings/TickerHoverLink";
+import { MetricInfoLabel } from "../components/metrics/MetricInfoLabel";
 import { formatCurrency, formatMultiple, formatPercent } from "../lib/utils";
 import { exportRowsAsCsv, exportRowsAsJson, exportRowsAsXlsx } from "../lib/exporters";
 import { evaluateFormula, FormulaError, parseFormula, type FormulaContext } from "../lib/formulaFilter";
@@ -707,7 +708,7 @@ export function RankingsPage() {
               {valuationMetrics.map((metric) => (
                 <label key={metric.key} className="block text-xs text-muted-foreground">
                   <div className="flex items-center justify-between">
-                    <span>{metric.label}</span>
+                    <MetricInfoLabel metric={metric} />
                     <span>{Math.round(weightFor(metric.key) * 100)}%</span>
                   </div>
                   <Slider

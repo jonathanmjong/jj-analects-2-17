@@ -16,6 +16,7 @@ import { HistoryLineChart } from "../components/charts/HistoryLineChart";
 import { IncomeWaterfall } from "../components/charts/IncomeWaterfall";
 import { PriceHistoryChart } from "../components/charts/PriceHistoryChart";
 import { SentimentSourcePicker } from "../components/sentiment/SentimentSourcePicker";
+import { MetricInfoLabel } from "../components/metrics/MetricInfoLabel";
 import { cn, formatCurrency, formatNumber, formatPercent } from "../lib/utils";
 
 function labelBadgeVariant(label: SentimentLabel): "positive" | "negative" | "neutral" {
@@ -335,7 +336,9 @@ export function CompanyPage() {
                 <tbody>
                   {metricsByCategory[category]?.map((metric) => (
                     <tr key={metric.key} className="border-t border-border">
-                      <td className="py-2 pr-4 text-muted-foreground">{metric.label}</td>
+                      <td className="py-2 pr-4 text-muted-foreground">
+                        <MetricInfoLabel metric={metric} />
+                      </td>
                       {yearColumns.map((period) => {
                         const score = period.scores?.[metric.key];
                         const missing = !score || score.isMissing;

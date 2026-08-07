@@ -85,7 +85,7 @@ const entries: MetricEntry[] = [
   { definition: { key: "avg_roic_5y", label: "5-Year Average ROIC", category: "moat", direction: "desc", unit: "percent", description: "Average ROIC across up to 5 fiscal years.", enabled: true }, calculator: moat.avgRoic5y },
   { definition: { key: "avg_gross_margin_5y", label: "5-Year Average Gross Margin", category: "moat", direction: "desc", unit: "percent", description: "Average gross margin across up to 5 fiscal years.", enabled: true }, calculator: moat.avgGrossMargin5y },
   { definition: { key: "avg_operating_margin_5y", label: "5-Year Average Operating Margin", category: "moat", direction: "desc", unit: "percent", description: "Average operating margin across up to 5 fiscal years.", enabled: true }, calculator: moat.avgOperatingMargin5y },
-  { definition: { key: "rnd_to_revenue", label: "R&D / Revenue", category: "moat", direction: "desc", unit: "percent", description: "Research & development expense divided by revenue.", enabled: true }, calculator: moat.rndToRevenue },
+  { definition: { key: "rnd_to_revenue", label: "R&D / Revenue", category: "moat", direction: "asc", unit: "percent", description: "Research & development expense divided by revenue.", enabled: true }, calculator: moat.rndToRevenue },
   { definition: { key: "intangible_assets_pct", label: "Intangible Assets %", category: "moat", direction: "desc", unit: "percent", description: "(Intangible assets + goodwill) divided by total assets.", enabled: true }, calculator: moat.intangibleAssetsPct },
 ];
 

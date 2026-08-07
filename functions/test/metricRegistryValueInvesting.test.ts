@@ -11,7 +11,7 @@ import { METRIC_DEFINITIONS } from "../src/metrics/definitions.js";
 
 /**
  * Guardrail suite for the metric registry, not the individual calculator math (see
- * metrics.test.ts for that). Three questions, each with its own describe block:
+ * metrics.test.ts for that). Four questions, each with its own describe block:
  *  1. Is every metric structurally sound (valid category/direction/unit, has a rationale)?
  *  2. Are metrics whose sign carries real economic meaning (P/E, EV/EBITDA, leverage ratios)
  *     correctly flagged negativeIsBad, so a future metric addition can't reintroduce the
@@ -19,6 +19,13 @@ import { METRIC_DEFINITIONS } from "../src/metrics/definitions.js";
  *  3. Do the category weights actually reflect this app's stated value-investing philosophy
  *     (e.g. momentum excluded by default), and does that weighting produce correctly-ordered
  *     rankings end-to-end for a real negativeIsBad metric from the live registry?
+ *  4. Does every metric's direction ("higher is better" vs. "lower is better") actually match
+ *     value-investing logic — not just internal consistency? A full manual audit against this
+ *     encoded expectation on 2026-08-08 found one real mismatch: rnd_to_revenue rewarded higher
+ *     R&D spend (desc) while the structurally identical capex_to_revenue rewards lower
+ *     reinvestment need (asc), with no principled reason for the difference, and contradicting
+ *     Buffett's stated preference for businesses that don't need heavy reinvestment to defend
+ *     their position — fixed to asc.
  */
 
 describe("metric registry — structural integrity", () => {
@@ -171,5 +178,108 @@ describe("metric registry — weighting reflects the stated value-investing phil
       const lossScore = stats.scoreByTicker.get("DEEP_LOSSES")!;
       expect(profitableScore, `${metric.key}: a positive value should score above a deep-loss negative value`).toBeGreaterThan(lossScore);
     }
+  });
+});
+
+describe("metric registry — direction matches value-investing logic, not just internal consistency", () => {
+  // "desc" = higher raw value is better; "asc" = lower is better. Every non-growth metric's
+  // expected direction, reasoned from value-investing principles (Graham margin-of-safety,
+  // Buffett quality/moat/capital-allocation, Greenblatt Magic Formula, Sloan accrual anomaly) —
+  // not just copied from whatever the registry currently says. See the file-level doc comment
+  // for the one real mismatch this caught (rnd_to_revenue).
+  const EXPECTED_DIRECTION: Record<string, "asc" | "desc"> = {
+    // Valuation: cheaper (lower multiple / higher yield) is better.
+    ev_fcf: "asc",
+    ev_ebit: "asc",
+    ev_ebitda: "asc",
+    pe_ttm: "asc",
+    pb: "asc",
+    ps: "asc",
+    price_tangible_book: "asc",
+    earnings_yield: "desc",
+    fcf_yield: "desc",
+    shareholder_yield_valuation: "desc",
+    // Momentum: not a value signal (0% default weight), but "higher return is better momentum"
+    // is still the internally-correct direction for what the metric measures.
+    momentum_12m1m: "desc",
+    momentum_risk_adj_3m: "desc",
+    momentum_risk_adj_6m: "desc",
+    // Profitability / cash generation: higher returns and margins are better.
+    roic: "desc",
+    roe: "desc",
+    roa: "desc",
+    gross_margin: "desc",
+    operating_margin: "desc",
+    net_margin: "desc",
+    fcf_margin: "desc",
+    ocf_margin: "desc",
+    fcf_to_revenue: "desc",
+    fcf_to_net_income: "desc",
+    cash_conversion_ratio: "desc",
+    // Financial strength: more cushion, less leverage, more coverage is safer.
+    cash_to_market_cap: "desc",
+    net_cash_to_market_cap: "desc",
+    debt_to_equity: "asc",
+    current_ratio: "desc",
+    quick_ratio: "desc",
+    interest_coverage: "desc",
+    debt_to_ebitda: "asc",
+    debt_maturity_mix: "desc",
+    // Capital allocation: more cash returned to shareholders, less dilution, less reinvestment
+    // need is better — capex_to_revenue and rnd_to_revenue (moat category, listed below) both
+    // encode "lower reinvestment need is better" for consistency with each other.
+    dividend_yield: "desc",
+    dividend_cagr_3y: "desc",
+    buyback_yield: "desc",
+    shareholder_yield_capalloc: "desc",
+    share_count_change: "asc",
+    capex_to_revenue: "asc",
+    // Efficiency: faster turnover and a shorter (or negative) cash conversion cycle is better.
+    asset_turnover: "desc",
+    inventory_turnover: "desc",
+    receivable_turnover: "desc",
+    cash_conversion_cycle: "asc",
+    // Earnings quality: cash-backed, stable earnings are higher quality (Sloan accrual anomaly).
+    accrual_ratio: "asc",
+    fcf_exceeds_net_income: "desc",
+    gross_margin_stability: "desc",
+    operating_margin_stability: "desc",
+    revenue_volatility: "asc",
+    eps_volatility: "asc",
+    // Moat: sustained high returns/margins are stronger evidence of a durable moat. rnd_to_revenue
+    // is "asc" (lower is better) to match capex_to_revenue's reinvestment-intensity logic — see
+    // the file-level doc comment. intangible_assets_pct stays "desc": price_tangible_book already
+    // penalizes overpaying for intangible-heavy companies at the valuation level, so this metric
+    // separately crediting real intangible-moat assets is a deliberate "cheap AND good" pairing,
+    // not a contradiction.
+    avg_roic_5y: "desc",
+    avg_gross_margin_5y: "desc",
+    avg_operating_margin_5y: "desc",
+    rnd_to_revenue: "asc",
+    intangible_assets_pct: "desc",
+  };
+
+  it("every explicitly-reasoned metric's direction matches the value-investing expectation", () => {
+    const mismatches = METRIC_DEFINITIONS.filter((m) => {
+      const expected = EXPECTED_DIRECTION[m.key];
+      return expected !== undefined && m.direction !== expected;
+    }).map((m) => `${m.key}: expected "${EXPECTED_DIRECTION[m.key]}", got "${m.direction}"`);
+    expect(mismatches).toEqual([]);
+  });
+
+  it("every growth_* metric (higher CAGR is better) is direction 'desc'", () => {
+    const mismatches = METRIC_DEFINITIONS.filter((m) => m.key.startsWith("growth_") && m.direction !== "desc").map(
+      (m) => m.key,
+    );
+    expect(mismatches).toEqual([]);
+  });
+
+  it("EXPECTED_DIRECTION covers every non-growth metric currently in the registry", () => {
+    // Catches a metric added without anyone reasoning about its direction — same spirit as the
+    // rationale-coverage check above, but for direction specifically.
+    const unreasoned = METRIC_DEFINITIONS.filter((m) => !m.key.startsWith("growth_") && !(m.key in EXPECTED_DIRECTION)).map(
+      (m) => m.key,
+    );
+    expect(unreasoned, "metric(s) added without a reasoned direction expectation in this test").toEqual([]);
   });
 });

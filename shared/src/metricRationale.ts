@@ -276,7 +276,7 @@ export const METRIC_RATIONALE: Record<string, MetricRationaleEntry> = {
   rnd_to_revenue: {
     verdict: "caveat",
     rationale:
-      "High R&D spend can indicate a moat being actively extended (pharma, tech), but is a genuinely ambiguous signal on its own — heavy R&D can just as easily mean a company is struggling to keep up with competitors.",
+      "Direction changed 2026-08-08 to match capex_to_revenue's treatment of reinvestment intensity: Buffett has repeatedly favored businesses that DON'T need heavy reinvestment (R&D included) to defend their position — rewarding higher R&D spend contradicted that and was inconsistent with how this app treats CapEx, a structurally identical \"cash the company must reinvest, as % of revenue\" concept. Still genuinely sector-dependent (pharma/tech companies often need sustained R&D just to survive, so low R&D isn't automatically a stronger moat there) — read alongside margin trends and industry context, not standalone.",
   },
   intangible_assets_pct: {
     verdict: "caveat",
