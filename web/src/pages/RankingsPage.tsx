@@ -12,8 +12,8 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import { Download, HelpCircle, SlidersHorizontal } from "lucide-react";
-import type { Company, MetricCategory, Sector } from "@proverbs/shared";
-import { compareNegativeIsBad, DEFAULT_RANKING_CONFIG, METRIC_CATEGORIES, SECTORS } from "@proverbs/shared";
+import type { Company, MetricCategory, MetricDefinition, Sector } from "@proverbs/shared";
+import { compareNegativeIsBad, defaultMetricWeight, DEFAULT_RANKING_CONFIG, METRIC_CATEGORIES, SECTORS } from "@proverbs/shared";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { useAllRankings } from "../hooks/useAllRankings";
 import { useCustomRankings } from "../hooks/useCustomRankings";
@@ -280,8 +280,8 @@ export function RankingsPage() {
     [metricDefinitions],
   );
 
-  function weightFor(metricKey: string): number {
-    return metricWeightInputs[metricKey] ?? 1;
+  function weightFor(metric: MetricDefinition): number {
+    return metricWeightInputs[metric.key] ?? defaultMetricWeight(metric);
   }
 
   function handleMetricWeightChange(metricKey: string, weight: number) {
@@ -709,13 +709,13 @@ export function RankingsPage() {
                 <label key={metric.key} className="block text-xs text-muted-foreground">
                   <div className="flex items-center justify-between">
                     <MetricInfoLabel metric={metric} />
-                    <span>{Math.round(weightFor(metric.key) * 100)}%</span>
+                    <span>{Math.round(weightFor(metric) * 100)}%</span>
                   </div>
                   <Slider
                     min={0}
                     max={2}
                     step={0.1}
-                    value={weightFor(metric.key)}
+                    value={weightFor(metric)}
                     onChange={(e) => handleMetricWeightChange(metric.key, Number(e.target.value))}
                     className="mt-1"
                   />

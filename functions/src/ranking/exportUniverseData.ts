@@ -4,6 +4,7 @@ import { log } from "../lib/logger.js";
 
 export interface CompanyYearScores {
   ticker: string;
+  sector: string | null;
   /** yearIndex 0 = most recent fiscal year available for this company. */
   byYear: Array<Record<string, number | null>>;
   periodKeys: string[];
@@ -24,6 +25,7 @@ const EXPORT_PATH = "public/ranking-universe.json.gz";
 export async function persistClientRankingExport(universe: CompanyYearScores[], metricKeys: string[]): Promise<void> {
   const companies = universe.map((c) => ({
     ticker: c.ticker,
+    sector: c.sector,
     byYear: c.byYear.map((yearValues) => metricKeys.map((key) => yearValues[key] ?? null)),
   }));
 

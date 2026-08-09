@@ -5,7 +5,7 @@ import { log } from "../lib/logger.js";
 import { METRIC_DEFINITIONS } from "../metrics/definitions.js";
 import { persistClientRankingExport, type CompanyYearScores } from "./exportUniverseData.js";
 
-async function loadUniverseRawScores(tickers: string[]): Promise<CompanyYearScores[]> {
+async function loadUniverseRawScores(tickers: string[], sectorByTicker: Map<string, string | null>): Promise<CompanyYearScores[]> {
   const results = await Promise.all(
     tickers.map(async (ticker) => {
       const snap = await collections.metricScores(ticker).orderBy("periodKey", "desc").limit(5).get();
@@ -18,7 +18,7 @@ async function loadUniverseRawScores(tickers: string[]): Promise<CompanyYearScor
         return values;
       });
       const periodKeys = snap.docs.map((doc) => doc.id);
-      return { ticker, byYear, periodKeys };
+      return { ticker, sector: sectorByTicker.get(ticker) ?? null, byYear, periodKeys };
     }),
   );
   return results;
@@ -46,7 +46,8 @@ export async function computeRankings(
 ): Promise<RankingResult[]> {
   const companiesSnap = await collections.companies().get();
   const tickers = companiesSnap.docs.map((d) => d.id);
-  const universe = await loadUniverseRawScores(tickers);
+  const sectorByTicker = new Map(companiesSnap.docs.map((d) => [d.id, (d.get("sector") as string | null) ?? null]));
+  const universe = await loadUniverseRawScores(tickers, sectorByTicker);
 
   const enabledMetrics = METRIC_DEFINITIONS.filter((m) => m.enabled);
   const { results, metricUnitScores } = computeCrossSectionalRankings(universe, METRIC_DEFINITIONS, config);
@@ -94,7 +95,7 @@ async function persistMetricPercentiles(
         scoresUpdate[metricKey] = {
           percentile,
           rankAmongPeers: stats!.rankByTicker.get(ticker) ?? null,
-          peerCount: stats!.peerCount,
+          peerCount: stats!.peerCountByTicker.get(ticker) ?? 0,
         };
         hasAnyUpdate = true;
       }

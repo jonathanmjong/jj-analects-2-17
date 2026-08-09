@@ -268,6 +268,11 @@ export const METRIC_RATIONALE: Record<string, MetricRationaleEntry> = {
     rationale: "Lower volatility suggests a more predictable, forecastable business (Buffett's stated preference), but can also just mean a mature, slow-growth company — read alongside growth metrics, not standalone.",
   },
   eps_volatility: { verdict: "caveat", rationale: "Same idea as revenue volatility, but EPS is also affected by share-count and leverage changes, so it's a noisier signal of the underlying business." },
+  piotroski_f_score: {
+    verdict: "core",
+    rationale:
+      "Piotroski's original 2000 paper designed this exact 9-point composite specifically to separate improving from deteriorating cheap (low P/B) stocks — squarely this app's use case. Each point is a concrete year-over-year improvement (profitability, leverage, liquidity, efficiency), so a high score is real, checkable evidence, not just a single ratio's snapshot.",
+  },
 
   // --- Moat ---
   avg_roic_5y: { verdict: "core", rationale: "Sustained high returns on capital over a full 5-year window are much stronger moat evidence than a single good year — this is the right way to measure durability, not just level." },

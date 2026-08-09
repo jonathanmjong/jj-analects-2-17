@@ -53,6 +53,14 @@ export interface MetricDefinition {
    * the good end (e.g. share buybacks shrinking share count) or can't occur.
    */
   negativeIsBad?: boolean;
+  /**
+   * True for metrics that are only meaningful compared within the same sector — e.g. asset
+   * turnover: a retailer and a software company have structurally different "normal" turnover
+   * ratios for reasons that have nothing to do with which is the better investment. When set,
+   * computeCrossSectionalRankings percentile-ranks each company against same-sector peers only
+   * (companies with no sector on record are grouped together), not the whole universe.
+   */
+  sectorRelative?: boolean;
 }
 
 /** One metric's computed value for a single company + period, pre-ranking. */

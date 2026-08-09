@@ -8,7 +8,7 @@ const EXPORT_PATH = "public/ranking-universe.json.gz";
 interface RankingUniverseExport {
   computedAt: string;
   metricKeys: string[];
-  companies: Array<{ ticker: string; byYear: Array<Array<number | null>> }>;
+  companies: Array<{ ticker: string; sector: string | null; byYear: Array<Array<number | null>> }>;
 }
 
 /**
@@ -49,6 +49,7 @@ export function loadRankingUniverse(): Promise<{ computedAt: string; universe: U
 
       const universe: UniverseCompanyData[] = exportData.companies.map((c) => ({
         ticker: c.ticker,
+        sector: c.sector,
         byYear: c.byYear.map((yearValues) => {
           const record: Record<string, number | null> = {};
           exportData.metricKeys.forEach((key, idx) => {

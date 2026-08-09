@@ -74,6 +74,7 @@ export function MetricInfoLabel({ metric, className }: { metric: MetricDefinitio
           <span className="mb-1.5 block font-medium text-foreground">
             {metric.direction === "desc" ? "Higher is better" : "Lower is better"}
             {metric.negativeIsBad && " — a negative value ranks below every positive one, regardless of size"}
+            {metric.sectorRelative && " — ranked against same-sector peers, not the whole universe"}
           </span>
           <span className="block text-muted-foreground">{info.rationale}</span>
         </span>

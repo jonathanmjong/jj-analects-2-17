@@ -15,6 +15,23 @@ export function netMarginOf(pf: PeriodFinancials): number | null {
   return safeDiv(pf.income.netIncome, pf.income.revenue);
 }
 
+export function roaOf(pf: PeriodFinancials): number | null {
+  return safeDiv(pf.income.netIncome, pf.balance.totalAssets);
+}
+
+export function currentRatioOf(pf: PeriodFinancials): number | null {
+  return safeDiv(pf.balance.totalCurrentAssets, pf.balance.totalCurrentLiabilities);
+}
+
+export function assetTurnoverOf(pf: PeriodFinancials): number | null {
+  return safeDiv(pf.income.revenue, pf.balance.totalAssets);
+}
+
+/** Long-term debt / total assets — Piotroski's original leverage measure (piotroskiFScore), not total debt/assets. */
+export function longTermLeverageOf(pf: PeriodFinancials): number | null {
+  return safeDiv(pf.balance.longTermDebt, pf.balance.totalAssets);
+}
+
 /**
  * ROIC = NOPAT / Invested Capital, NOPAT = EBIT * (1 - effective tax rate).
  * Falls back to a 21% statutory-ish rate when pretax income / tax expense

@@ -68,9 +68,9 @@ const entries: MetricEntry[] = [
   { definition: { key: "capex_to_revenue", label: "CapEx / Revenue", category: "capitalAllocation", direction: "asc", unit: "percent", description: "Capital expenditures divided by revenue.", enabled: true }, calculator: capitalAllocation.capexToRevenue },
 
   // --- Efficiency ---
-  { definition: { key: "asset_turnover", label: "Asset Turnover", category: "efficiency", direction: "desc", unit: "ratio", description: "Revenue divided by total assets.", enabled: true }, calculator: efficiency.assetTurnover },
-  { definition: { key: "inventory_turnover", label: "Inventory Turnover", category: "efficiency", direction: "desc", unit: "ratio", description: "Cost of revenue divided by inventory.", enabled: true }, calculator: efficiency.inventoryTurnover },
-  { definition: { key: "receivable_turnover", label: "Receivable Turnover", category: "efficiency", direction: "desc", unit: "ratio", description: "Revenue divided by receivables.", enabled: true }, calculator: efficiency.receivableTurnover },
+  { definition: { key: "asset_turnover", label: "Asset Turnover", category: "efficiency", direction: "desc", unit: "ratio", description: "Revenue divided by total assets.", enabled: true, sectorRelative: true }, calculator: efficiency.assetTurnover },
+  { definition: { key: "inventory_turnover", label: "Inventory Turnover", category: "efficiency", direction: "desc", unit: "ratio", description: "Cost of revenue divided by inventory.", enabled: true, sectorRelative: true }, calculator: efficiency.inventoryTurnover },
+  { definition: { key: "receivable_turnover", label: "Receivable Turnover", category: "efficiency", direction: "desc", unit: "ratio", description: "Revenue divided by receivables.", enabled: true, sectorRelative: true }, calculator: efficiency.receivableTurnover },
   { definition: { key: "cash_conversion_cycle", label: "Cash Conversion Cycle", category: "efficiency", direction: "asc", unit: "years", description: "Days inventory + days sales - days payables outstanding.", enabled: true }, calculator: efficiency.cashConversionCycle },
 
   // --- Earnings Quality ---
@@ -80,6 +80,7 @@ const entries: MetricEntry[] = [
   { definition: { key: "operating_margin_stability", label: "Operating Margin Stability", category: "earningsQuality", direction: "desc", unit: "ratio", description: "Inverse of operating margin's coefficient of variation across history.", enabled: true }, calculator: earningsQuality.operatingMarginStability },
   { definition: { key: "revenue_volatility", label: "Revenue Volatility", category: "earningsQuality", direction: "asc", unit: "ratio", description: "Coefficient of variation of revenue across history.", enabled: true }, calculator: earningsQuality.revenueVolatility },
   { definition: { key: "eps_volatility", label: "EPS Volatility", category: "earningsQuality", direction: "asc", unit: "ratio", description: "Coefficient of variation of diluted EPS across history.", enabled: true }, calculator: earningsQuality.epsVolatility },
+  { definition: { key: "piotroski_f_score", label: "Piotroski F-Score", category: "earningsQuality", direction: "desc", unit: "ratio", description: "9-point composite of year-over-year profitability, leverage/liquidity, and operating-efficiency improvement (Piotroski, 2000).", enabled: true }, calculator: earningsQuality.piotroskiFScore },
 
   // --- Competitive Moat ---
   { definition: { key: "avg_roic_5y", label: "5-Year Average ROIC", category: "moat", direction: "desc", unit: "percent", description: "Average ROIC across up to 5 fiscal years.", enabled: true }, calculator: moat.avgRoic5y },

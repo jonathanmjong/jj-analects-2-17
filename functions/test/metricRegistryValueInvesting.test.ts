@@ -135,6 +135,18 @@ describe("metric registry — negativeIsBad correctness", () => {
   });
 });
 
+describe("metric registry — sectorRelative coverage", () => {
+  // Exactly the metrics explicitly documented in shared/src/metricRationale.ts as "most
+  // meaningful compared within a sector" — see sectorRelativeRanking.test.ts for the ranking
+  // engine's actual sector-grouping behavior.
+  const EXPECTED_SECTOR_RELATIVE = new Set(["asset_turnover", "inventory_turnover", "receivable_turnover"]);
+
+  it("exactly the documented sector-dependent efficiency metrics are flagged sectorRelative", () => {
+    const actual = new Set(METRIC_DEFINITIONS.filter((m) => m.sectorRelative).map((m) => m.key));
+    expect([...actual].sort()).toEqual([...EXPECTED_SECTOR_RELATIVE].sort());
+  });
+});
+
 describe("metric registry — weighting reflects the stated value-investing philosophy", () => {
   it("default category weights sum to exactly 1", () => {
     const sum = Object.values(DEFAULT_CATEGORY_WEIGHTS).reduce((a, b) => a + b, 0);
@@ -159,9 +171,9 @@ describe("metric registry — weighting reflects the stated value-investing phil
 
     for (const metric of negativeIsBadMetrics) {
       const universe: UniverseCompanyData[] = [
-        { ticker: "PROFITABLE", byYear: [{ [metric.key]: 5 }] },
-        { ticker: "EXPENSIVE_BUT_PROFITABLE", byYear: [{ [metric.key]: 50 }] },
-        { ticker: "DEEP_LOSSES", byYear: [{ [metric.key]: -500 }] },
+        { ticker: "PROFITABLE", sector: null, byYear: [{ [metric.key]: 5 }] },
+        { ticker: "EXPENSIVE_BUT_PROFITABLE", sector: null, byYear: [{ [metric.key]: 50 }] },
+        { ticker: "DEEP_LOSSES", sector: null, byYear: [{ [metric.key]: -500 }] },
       ];
       const config = {
         ...DEFAULT_RANKING_CONFIG,
@@ -246,6 +258,7 @@ describe("metric registry — direction matches value-investing logic, not just 
     operating_margin_stability: "desc",
     revenue_volatility: "asc",
     eps_volatility: "asc",
+    piotroski_f_score: "desc",
     // Moat: sustained high returns/margins are stronger evidence of a durable moat. rnd_to_revenue
     // is "asc" (lower is better) to match capex_to_revenue's reinvestment-intensity logic — see
     // the file-level doc comment. intangible_assets_pct stays "desc": price_tangible_book already

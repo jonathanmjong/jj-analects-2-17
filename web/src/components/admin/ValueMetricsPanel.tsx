@@ -1,6 +1,7 @@
 import type { MetricCategory, MetricDefinition, MetricVerdict } from "@proverbs/shared";
 import {
   CATEGORY_RATIONALE,
+  defaultMetricWeight,
   DEFAULT_CATEGORY_WEIGHTS,
   getMetricRationale,
   GROWTH_HORIZON_NOTE,
@@ -113,11 +114,11 @@ export function ValueMetricsPanel() {
                               <td className="py-2 pr-4 font-medium">{metric.label}</td>
                               <td className="py-2 pr-4 text-muted-foreground">
                                 {metric.direction === "desc" ? "Higher is better" : "Lower is better"}
-                                {metric.negativeIsBad && (
-                                  <div className="mt-1">
-                                    <Badge variant="negative">negative ranks last</Badge>
-                                  </div>
-                                )}
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {metric.negativeIsBad && <Badge variant="negative">negative ranks last</Badge>}
+                                  {metric.sectorRelative && <Badge variant="accent">ranked within sector</Badge>}
+                                  <Badge variant="neutral">{Math.round(defaultMetricWeight(metric) * 100)}% metric weight</Badge>
+                                </div>
                               </td>
                               <td className="py-2 pr-4">
                                 <VerdictBadge verdict={info.verdict} />

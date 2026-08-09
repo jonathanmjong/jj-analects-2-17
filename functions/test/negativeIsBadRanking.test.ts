@@ -31,7 +31,7 @@ function configFor(metrics: MetricDefinition[]): RankingWeightsConfig {
 }
 
 function universeOf(values: Record<string, number>): UniverseCompanyData[] {
-  return Object.entries(values).map(([ticker, value]) => ({ ticker, byYear: [{ pe_like: value }] }));
+  return Object.entries(values).map(([ticker, value]) => ({ ticker, sector: null, byYear: [{ pe_like: value }] }));
 }
 
 describe("computeCrossSectionalRankings — negativeIsBad", () => {
@@ -78,8 +78,8 @@ describe("computeCrossSectionalRankings — negativeIsBad", () => {
     // pushed below positives.
     const shareCountChange: MetricDefinition = { ...peLikeMetric, key: "share_count_change", negativeIsBad: undefined };
     const universe: UniverseCompanyData[] = [
-      { ticker: "BUYBACKS", byYear: [{ share_count_change: -0.05 }] },
-      { ticker: "DILUTING", byYear: [{ share_count_change: 0.1 }] },
+      { ticker: "BUYBACKS", sector: null, byYear: [{ share_count_change: -0.05 }] },
+      { ticker: "DILUTING", sector: null, byYear: [{ share_count_change: 0.1 }] },
     ];
     const { metricUnitScores } = computeCrossSectionalRankings(
       universe,

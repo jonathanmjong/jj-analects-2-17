@@ -1,11 +1,14 @@
 import type { HeadlineMetrics } from "./company.js";
 import type { MetricCategory, MetricDefinition } from "./metrics.js";
 import { DEFAULT_YEAR_WEIGHTS, METRIC_CATEGORIES } from "./metrics.js";
+import { getMetricRationale, type MetricVerdict } from "./metricRationale.js";
 import type { CategoryScore, RankingResult, RankingWeightsConfig } from "./ranking.js";
 import { percentileRanks, weightedAverage, winsorize, zscoreToUnitScore, zscores } from "./rankingMath.js";
 
 export interface UniverseCompanyData {
   ticker: string;
+  /** Used by sectorRelative metrics to group same-sector peers; companies with no sector on record are grouped together. */
+  sector: string | null;
   /** yearIndex 0 = most recent fiscal year available for this company. */
   byYear: Array<Record<string, number | null>>;
 }
@@ -13,15 +16,39 @@ export interface UniverseCompanyData {
 export interface MetricYearStats {
   /** ticker -> direction-adjusted unit score (0-1, higher always means "better performing"). */
   scoreByTicker: Map<string, number>;
-  /** ticker -> rank among peers for this metric+year, 1 = best. */
+  /** ticker -> rank among peers for this metric+year, 1 = best. For a sectorRelative metric, "peers" means same-sector peers. */
   rankByTicker: Map<string, number>;
-  peerCount: number;
+  /** ticker -> size of the peer group its rank/score were computed against (the whole universe with data, or its sector group for a sectorRelative metric). */
+  peerCountByTicker: Map<string, number>;
 }
 
 export interface RankingComputation {
   results: RankingResult[];
   /** metricKey -> yearIndex -> per-metric-year cross-sectional stats, needed by callers that persist percentiles/ranks. */
   metricUnitScores: Map<string, Map<number, MetricYearStats>>;
+}
+
+/**
+ * A metric's default per-metric weight within its category, used only when the caller's config
+ * doesn't specify an explicit metricWeights override. Reuses the same verdict taxonomy admins
+ * and users see in the Value Metrics panel / hover tooltips (shared/src/metricRationale.ts) so a
+ * "use with caution" metric contributes less to the score by default than a "core" one, instead
+ * of every metric in a category counting equally regardless of how well-grounded it is.
+ * "not-value-investing" (currently only the 3 momentum metrics) stays at full weight here — the
+ * primary exclusion mechanism for that is the momentum category's 0% default weight, not a
+ * further per-metric penalty, so a user who deliberately turns momentum weighting on isn't also
+ * fighting an extra hidden discount.
+ */
+export const VERDICT_DEFAULT_WEIGHT: Record<MetricVerdict, number> = {
+  core: 1,
+  supporting: 0.66,
+  caveat: 0.33,
+  "not-value-investing": 1,
+};
+
+/** The weight a metric gets when a caller's config doesn't specify an explicit override — exported so UI weight sliders can display a default that matches what the engine actually applies, instead of assuming a flat 100%. */
+export function defaultMetricWeight(metric: MetricDefinition): number {
+  return VERDICT_DEFAULT_WEIGHT[getMetricRationale(metric.key, metric.category).verdict];
 }
 
 /** Winsorizes + normalizes one group of same-sign values; 0 = lowest raw value in the group, 1 = highest — not yet direction-adjusted. */
@@ -39,6 +66,64 @@ function unitScores(
   return entries.map((e, idx) => ({ ticker: e.ticker, unit: normalized[idx] }));
 }
 
+interface GroupResult {
+  scoreByTicker: Map<string, number>;
+  rankByTicker: Map<string, number>;
+  peerCount: number;
+}
+
+/**
+ * Scores + ranks one peer group (the whole universe with data for a normal metric, or one
+ * sector's companies for a sectorRelative metric) for a single metric+year. Handles the
+ * negativeIsBad split (see MetricDefinition) within the group.
+ */
+function computeGroupResult(
+  entries: Array<{ ticker: string; value: number }>,
+  metric: MetricDefinition,
+  config: RankingWeightsConfig,
+): GroupResult {
+  const positives = metric.negativeIsBad ? entries.filter((e) => e.value > 0) : entries;
+  const nonPositives = metric.negativeIsBad ? entries.filter((e) => e.value <= 0) : [];
+
+  const scoreByTicker = new Map<string, number>();
+
+  if (nonPositives.length === 0) {
+    // No split needed: either negativeIsBad doesn't apply to this metric, or every
+    // company happens to have a positive value this year — standard single-group scoring.
+    unitScores(positives, config).forEach(({ ticker, unit }) => {
+      scoreByTicker.set(ticker, metric.direction === "asc" ? 1 - unit : unit);
+    });
+  } else if (positives.length === 0) {
+    // Every company is negative this year — no positive group to rank above, but "closer
+    // to zero is less bad" still applies within the group (a smaller loss should still
+    // score better than a larger one), not the metric's normal direction.
+    unitScores(entries, config).forEach(({ ticker, unit }) => {
+      scoreByTicker.set(ticker, unit);
+    });
+  } else {
+    // Every positive-value company must outrank every negative-value one, regardless of
+    // magnitude (a P/E of -50 is a worse company than a P/E of 50, not a "cheaper" one).
+    // Positive group keeps the metric's normal direction and lands in (0.5, 1]; negative
+    // group is scored by closeness to zero (less loss is still less bad) and lands in
+    // [0, 0.5) — the two ranges never overlap.
+    unitScores(positives, config).forEach(({ ticker, unit }) => {
+      const directional = metric.direction === "asc" ? 1 - unit : unit;
+      scoreByTicker.set(ticker, 0.5 + 0.5 * directional);
+    });
+    const NEG_CEILING = 0.5 - 1e-9;
+    unitScores(nonPositives, config).forEach(({ ticker, unit }) => {
+      scoreByTicker.set(ticker, unit * NEG_CEILING);
+    });
+  }
+
+  const rankByTicker = new Map<string, number>();
+  [...scoreByTicker.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([ticker], idx) => rankByTicker.set(ticker, idx + 1));
+
+  return { scoreByTicker, rankByTicker, peerCount: entries.length };
+}
+
 function extractHeadlineMetrics(mostRecentYear: Record<string, number | null> | undefined): HeadlineMetrics {
   return {
     peTtm: mostRecentYear?.pe_ttm ?? null,
@@ -53,11 +138,12 @@ function extractHeadlineMetrics(mostRecentYear: Record<string, number | null> | 
 /**
  * Cross-sectional ranking engine, pure (no I/O). For each metric x
  * fiscal-year-index, normalizes raw values across every company that has one
- * (winsorize then percentile or z-score), flips direction for "asc" metrics,
- * then combines years using DEFAULT_YEAR_WEIGHTS (35/25/20/10/10),
- * renormalized over whichever years are actually present for that company.
- * Metric scores roll up into category scores (equal-weighted across
- * available metrics), and category scores roll up into the overall score
+ * (winsorize then percentile or z-score, sector-grouped first for
+ * sectorRelative metrics), flips direction for "asc" metrics, then combines
+ * years using DEFAULT_YEAR_WEIGHTS (35/25/20/10/10), renormalized over
+ * whichever years are actually present for that company. Metric scores roll
+ * up into category scores (weighted by each metric's verdict-based default,
+ * or a caller override), and category scores roll up into the overall score
  * using categoryWeights (renormalized over categories that have data for
  * that company).
  *
@@ -73,6 +159,7 @@ export function computeCrossSectionalRankings(
 ): RankingComputation {
   const yearsIncluded = config.yearsIncluded;
   const enabledMetrics = metrics.filter((m) => m.enabled);
+  const tickerToSector = new Map(universe.map((c) => [c.ticker, c.sector]));
 
   const metricUnitScores = new Map<string, Map<number, MetricYearStats>>();
 
@@ -84,46 +171,32 @@ export function computeCrossSectionalRankings(
         .filter((e): e is { ticker: string; value: number } => e.value !== null && Number.isFinite(e.value));
       if (entries.length < 2) continue;
 
-      const positives = metric.negativeIsBad ? entries.filter((e) => e.value > 0) : entries;
-      const nonPositives = metric.negativeIsBad ? entries.filter((e) => e.value <= 0) : [];
-
       const scoreByTicker = new Map<string, number>();
+      const rankByTicker = new Map<string, number>();
+      const peerCountByTicker = new Map<string, number>();
 
-      if (nonPositives.length === 0) {
-        // No split needed: either negativeIsBad doesn't apply to this metric, or every
-        // company happens to have a positive value this year — standard single-group scoring.
-        unitScores(positives, config).forEach(({ ticker, unit }) => {
-          scoreByTicker.set(ticker, metric.direction === "asc" ? 1 - unit : unit);
-        });
-      } else if (positives.length === 0) {
-        // Every company is negative this year — no positive group to rank above, but "closer
-        // to zero is less bad" still applies within the group (a smaller loss should still
-        // score better than a larger one), not the metric's normal direction.
-        unitScores(entries, config).forEach(({ ticker, unit }) => {
-          scoreByTicker.set(ticker, unit);
-        });
+      const applyGroup = (group: Array<{ ticker: string; value: number }>) => {
+        if (group.length < 2) return; // too few peers to rank meaningfully this year — leave missing, not a fabricated rank of 1/1
+        const result = computeGroupResult(group, metric, config);
+        result.scoreByTicker.forEach((s, t) => scoreByTicker.set(t, s));
+        result.rankByTicker.forEach((r, t) => rankByTicker.set(t, r));
+        group.forEach((e) => peerCountByTicker.set(e.ticker, result.peerCount));
+      };
+
+      if (metric.sectorRelative) {
+        const bySector = new Map<string | null, Array<{ ticker: string; value: number }>>();
+        for (const e of entries) {
+          const sector = tickerToSector.get(e.ticker) ?? null;
+          const group = bySector.get(sector);
+          if (group) group.push(e);
+          else bySector.set(sector, [e]);
+        }
+        bySector.forEach(applyGroup);
       } else {
-        // Every positive-value company must outrank every negative-value one, regardless of
-        // magnitude (a P/E of -50 is a worse company than a P/E of 50, not a "cheaper" one).
-        // Positive group keeps the metric's normal direction and lands in (0.5, 1]; negative
-        // group is scored by closeness to zero (less loss is still less bad) and lands in
-        // [0, 0.5) — the two ranges never overlap.
-        unitScores(positives, config).forEach(({ ticker, unit }) => {
-          const directional = metric.direction === "asc" ? 1 - unit : unit;
-          scoreByTicker.set(ticker, 0.5 + 0.5 * directional);
-        });
-        const NEG_CEILING = 0.5 - 1e-9;
-        unitScores(nonPositives, config).forEach(({ ticker, unit }) => {
-          scoreByTicker.set(ticker, unit * NEG_CEILING);
-        });
+        applyGroup(entries);
       }
 
-      const rankByTicker = new Map<string, number>();
-      [...scoreByTicker.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .forEach(([ticker], idx) => rankByTicker.set(ticker, idx + 1));
-
-      perYear.set(yearIndex, { scoreByTicker, rankByTicker, peerCount: entries.length });
+      perYear.set(yearIndex, { scoreByTicker, rankByTicker, peerCountByTicker });
     }
     metricUnitScores.set(metric.key, perYear);
   }
@@ -135,7 +208,7 @@ export function computeCrossSectionalRankings(
       let missingCount = 0;
 
       for (const metric of metricsInCategory) {
-        const metricWeight = config.metricWeights?.[metric.key] ?? 1;
+        const metricWeight = config.metricWeights?.[metric.key] ?? defaultMetricWeight(metric);
         if (metricWeight <= 0) {
           missingCount++;
           continue;
