@@ -58,9 +58,15 @@ function pickPrimaryTicker(tickers: string[]): string {
  * computeRankings/persistRankings pass on top — crashed with an OOM at 526MiB
  * once the universe grew past ~1,300 companies. Matches recomputeRankings,
  * which does the same ranking pass and is already provisioned at 1GiB.
+ * timeoutSeconds bumped 540->1800 on 2026-08-11: a run that actually deletes
+ * companies (triggering the full recompute+persist pass) was hit by
+ * DEADLINE_EXCEEDED partway through — the per-company non-operating-entity
+ * check plus a full rankings recompute now regularly exceeds 540s as the
+ * universe has grown. Matches quarterlyStatementRefresh/annualStatementRefresh,
+ * which do similarly heavy full-universe passes and are already at 1800s.
  */
 export const cleanupUniverse = onSchedule(
-  { schedule: "every 24 hours", timeoutSeconds: 540, memory: "1GiB" },
+  { schedule: "every 24 hours", timeoutSeconds: 1800, memory: "1GiB" },
   async () => {
     const startedAt = new Date().toISOString();
     const companiesSnap = await collections.companies().get();
