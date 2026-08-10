@@ -35,6 +35,24 @@ export function isPlausibleMarketCap(marketCap: number, revenue?: number | null)
   return true;
 }
 
+/**
+ * The P/S guard alone can't separate genuinely extreme valuations from filer
+ * errors — observed in production: SMR (~143x) and RGTI (~318x) are *real*
+ * P/S ratios, while Gentherm's scale-erred EntityPublicFloat implied ~585x.
+ * No fixed threshold splits those. But the live quote (market price × filed
+ * share count) and EDGAR's EntityPublicFloat are independently sourced, and
+ * scale-tagging errors are off by exactly 10^3/10^6 — so when the two agree
+ * on order of magnitude, the value is real even if the P/S guard balks.
+ * Float legitimately runs below market cap (insiders excluded), hence the
+ * asymmetric-but-wide 20x tolerance: far looser than any real float/cap gap,
+ * far tighter than the 1000x+ gap a scale error produces.
+ */
+export function corroboratesPublicFloat(marketCap: number, publicFloat: number): boolean {
+  if (!(marketCap > 0 && publicFloat > 0)) return false;
+  const ratio = marketCap / publicFloat;
+  return ratio >= 1 / 20 && ratio <= 20;
+}
+
 interface ResolvedQuote {
   date: string;
   sharePrice: number | null;
@@ -47,6 +65,7 @@ interface ResolvedQuote {
 
 async function resolveQuote(symbol: string): Promise<ResolvedQuote | null> {
   const liveQuote = await getProvider(PRICE_PROVIDER).getQuote(symbol);
+  let live: ResolvedQuote | null = null;
   if (liveQuote) {
     const [latestIncomeSnap, latestBalanceSnap] = await Promise.all([
       collections.incomeStatements(symbol).orderBy("fiscalYear", "desc").limit(1).get(),
@@ -57,16 +76,15 @@ async function resolveQuote(symbol: string): Promise<ResolvedQuote | null> {
     const totalDebt = (latestBalanceSnap.docs[0]?.data()?.totalDebt as number | null) ?? 0;
     const cash = (latestBalanceSnap.docs[0]?.data()?.cashAndEquivalents as number | null) ?? 0;
     const marketCap = sharesOutstanding !== null ? liveQuote.sharePrice * sharesOutstanding : 0;
-    if (isPlausibleMarketCap(marketCap, revenue)) {
-      return {
-        date: liveQuote.date,
-        sharePrice: liveQuote.sharePrice,
-        marketCap,
-        enterpriseValue: marketCap > 0 ? marketCap + totalDebt - cash : null,
-        sharesOutstanding,
-        source: "live",
-      };
-    }
+    live = {
+      date: liveQuote.date,
+      sharePrice: liveQuote.sharePrice,
+      marketCap,
+      enterpriseValue: marketCap > 0 ? marketCap + totalDebt - cash : null,
+      sharesOutstanding,
+      source: "live",
+    };
+    if (isPlausibleMarketCap(marketCap, revenue)) return live;
     if (marketCap > MAX_PLAUSIBLE_MARKET_CAP) {
       log.warn(`Implausible market cap from live quote for ${symbol}: $${marketCap} — falling back to SEC EDGAR`);
     }
@@ -76,6 +94,15 @@ async function resolveQuote(symbol: string): Promise<ResolvedQuote | null> {
   // EDGAR's official EntityPublicFloat (approximate market value as of the
   // most recent 10-K cover-page date). Not live, but real and keyless.
   const approx = await secEdgarFallback.getApproxMarketValue(symbol);
+
+  // A live quote the P/S guard rejected is still the right answer when
+  // EDGAR's independent float agrees on magnitude — without this, genuinely
+  // extreme-P/S companies (SMR, RGTI, ROIV in production) failed BOTH paths
+  // and never received a price update at all.
+  if (live && approx && corroboratesPublicFloat(live.marketCap, approx.publicFloat)) {
+    return live;
+  }
+
   if (!approx) return null;
 
   const [latestBalanceSnap, latestIncomeSnap] = await Promise.all([

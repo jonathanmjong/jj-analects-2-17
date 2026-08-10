@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPlausibleMarketCap, MAX_PLAUSIBLE_MARKET_CAP } from "../src/ingestion/ingestPrices.js";
+import { corroboratesPublicFloat, isPlausibleMarketCap, MAX_PLAUSIBLE_MARKET_CAP } from "../src/ingestion/ingestPrices.js";
 
 describe("isPlausibleMarketCap", () => {
   it("accepts real-world market caps", () => {
@@ -40,5 +40,26 @@ describe("isPlausibleMarketCap", () => {
     expect(isPlausibleMarketCap(500_000_000_000, 1_000_000_000)).toBe(false);
     // A generous but real 80x P/S should still pass.
     expect(isPlausibleMarketCap(80_000_000_000, 1_000_000_000)).toBe(true);
+  });
+});
+
+describe("corroboratesPublicFloat", () => {
+  it("accepts a live cap and EDGAR float that agree on magnitude", () => {
+    // SMR in production: live cap ~$5.3B, EDGAR float ~$5.3B — a real ~143x
+    // P/S the guard alone rejected on both paths.
+    expect(corroboratesPublicFloat(5_300_000_000, 5_300_000_000)).toBe(true);
+    // Float legitimately runs below cap when insiders hold a large stake.
+    expect(corroboratesPublicFloat(10_000_000_000, 1_000_000_000)).toBe(true);
+  });
+
+  it("rejects a scale-tagging error — sources disagree by 10^3x or more", () => {
+    // Gentherm in production: real cap ~$1.5B vs. erred float $854B.
+    expect(corroboratesPublicFloat(1_500_000_000, 853_967_174_000)).toBe(false);
+    expect(corroboratesPublicFloat(1_500_000_000_000_000, 1_500_000_000)).toBe(false);
+  });
+
+  it("never corroborates against a missing or zero value", () => {
+    expect(corroboratesPublicFloat(0, 5_000_000_000)).toBe(false);
+    expect(corroboratesPublicFloat(5_000_000_000, 0)).toBe(false);
   });
 });
