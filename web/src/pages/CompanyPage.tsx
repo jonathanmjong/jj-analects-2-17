@@ -16,6 +16,9 @@ import { HistoryLineChart } from "../components/charts/HistoryLineChart";
 import { IncomeWaterfall } from "../components/charts/IncomeWaterfall";
 import { PriceHistoryChart } from "../components/charts/PriceHistoryChart";
 import { SentimentSourcePicker } from "../components/sentiment/SentimentSourcePicker";
+import { ForensicPanel } from "../components/company/ForensicPanel";
+import { ReverseDcfPanel } from "../components/company/ReverseDcfPanel";
+import { StatementsExplorer } from "../components/company/StatementsExplorer";
 import { MetricInfoLabel } from "../components/metrics/MetricInfoLabel";
 import { cn, formatCurrency, formatNumber, formatPercent } from "../lib/utils";
 
@@ -302,6 +305,33 @@ export function CompanyPage() {
               netIncome: data.income[0]?.netIncome ?? null,
             }}
           />
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReverseDcfPanel
+          income={data.income}
+          balance={data.balance}
+          cashFlow={data.cashFlow}
+          sector={data.company.sector ?? null}
+          sharePrice={data.company.latest?.sharePrice ?? null}
+          sharesOutstanding={data.company.latest?.sharesOutstanding ?? null}
+        />
+        <ForensicPanel
+          income={data.income}
+          balance={data.balance}
+          cashFlow={data.cashFlow}
+          marketCap={data.company.latest?.marketCap ?? null}
+          sector={data.company.sector ?? null}
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Financial Statements</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <StatementsExplorer income={data.income} balance={data.balance} cashFlow={data.cashFlow} />
         </CardContent>
       </Card>
 

@@ -62,6 +62,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // The `system` collection is otherwise entirely internal (ingestion cursors written by the
+    // scheduled jobs) and has no wildcard rule, so it stays closed by default. This one document
+    // — universe-wide trip counts per forensic check, written by recomputeRankingsDaily — is the
+    // sole exception, so the company page can caption each flag with its base rate. Keep any
+    // future `system` rule specific-path for the same reason; a wildcard here would expose the
+    // cursors too.
+    match /system/forensicBaseRates {
+      allow read: if isSubscribed();
+      allow write: if false;
+    }
+
     match /users/{uid} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid);
