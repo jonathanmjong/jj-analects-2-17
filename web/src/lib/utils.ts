@@ -8,12 +8,17 @@ export function cn(...inputs: ClassValue[]): string {
 export function formatCurrency(value: number | null, opts: { compact?: boolean } = {}): string {
   if (value === null || Number.isNaN(value)) return "—";
   if (opts.compact) {
+    // ICU versions disagree on whether compact notation keeps a trailing ".0"
+    // (surfaced as a CI-vs-local test mismatch) — strip it so output is
+    // deterministic across Node and browser versions.
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
       notation: "compact",
       maximumFractionDigits: 1,
-    }).format(value);
+    })
+      .format(value)
+      .replace(/\.0([KMBT])$/, "$1");
   }
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 }
