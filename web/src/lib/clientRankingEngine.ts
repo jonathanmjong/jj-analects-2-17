@@ -2,6 +2,7 @@ import { getBytes, ref } from "firebase/storage";
 import type { MetricDefinition, RankingResult, RankingWeightsConfig, UniverseCompanyData } from "@proverbs/shared";
 import { computeCrossSectionalRankings } from "@proverbs/shared";
 import { storage } from "./firebase";
+import { CACHE_VERSION, idbGet, idbSet, isUniverseCacheFresh } from "./idbCache";
 
 const EXPORT_PATH = "public/ranking-universe.json.gz";
 
@@ -33,6 +34,38 @@ async function decodeExportBytes(bytes: ArrayBuffer): Promise<RankingUniverseExp
 
 let inFlight: Promise<{ computedAt: string; universe: UniverseCompanyData[] }> | null = null;
 
+const UNIVERSE_CACHE_KEY = `ranking-universe-${CACHE_VERSION}`;
+
+interface CachedUniverseExport {
+  cachedAt: number;
+  export: RankingUniverseExport;
+}
+
+/**
+ * Fetch order: fresh IndexedDB copy (skips the ~2MB download + decompress on
+ * every reload) → network (and re-cache) → stale IndexedDB copy as a network-
+ * failure fallback (yesterday's rankings beat a broken page). The in-memory
+ * module cache still sits on top so slider tweaks never touch IDB either.
+ */
+async function fetchExportData(): Promise<RankingUniverseExport> {
+  const cached = await idbGet<CachedUniverseExport>(UNIVERSE_CACHE_KEY);
+  if (cached && isUniverseCacheFresh(cached.cachedAt, Date.now())) {
+    return cached.export;
+  }
+  try {
+    const bytes = await getBytes(ref(storage, EXPORT_PATH));
+    const exportData = await decodeExportBytes(bytes);
+    void idbSet(UNIVERSE_CACHE_KEY, { cachedAt: Date.now(), export: exportData } satisfies CachedUniverseExport);
+    return exportData;
+  } catch (err) {
+    if (cached) {
+      console.warn("Ranking universe fetch failed; using the previous day's cached copy.", err);
+      return cached.export;
+    }
+    throw err;
+  }
+}
+
 /**
  * Fetches (once per page session, subject to Storage security rules —
  * subscribed users only, see storage.rules) and parses the bulk raw-metric
@@ -44,8 +77,7 @@ let inFlight: Promise<{ computedAt: string; universe: UniverseCompanyData[] }> |
 export function loadRankingUniverse(): Promise<{ computedAt: string; universe: UniverseCompanyData[] }> {
   if (!inFlight) {
     inFlight = (async () => {
-      const bytes = await getBytes(ref(storage, EXPORT_PATH));
-      const exportData = await decodeExportBytes(bytes);
+      const exportData = await fetchExportData();
 
       const universe: UniverseCompanyData[] = exportData.companies.map((c) => ({
         ticker: c.ticker,

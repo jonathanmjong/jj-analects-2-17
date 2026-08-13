@@ -904,7 +904,7 @@ export function RankingsPage() {
             step={1}
             value={yearsIncluded}
             onChange={(e) => handleYearsChange(Number(e.target.value))}
-            className="shrink-0"
+            className="w-28 shrink-0"
           />
         </div>
 
@@ -918,7 +918,7 @@ export function RankingsPage() {
             step={1}
             value={minCategoryWeightMetrics}
             onChange={(e) => setMinCategoryWeightMetrics(Number(e.target.value))}
-            className="shrink-0"
+            className="w-28 shrink-0"
           />
         </div>
       </div>

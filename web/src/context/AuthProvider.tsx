@@ -5,6 +5,7 @@ import { auth, db, googleProvider } from "../lib/firebase";
 import { clearStoredReferralCode, getStoredReferralCode } from "../lib/referral";
 import { clearPageState } from "../hooks/usePageState";
 import { clearRankingUniverseCache } from "../lib/clientRankingEngine";
+import { ensureCacheOwner } from "../lib/idbCache";
 import { queryClient } from "../lib/queryClient";
 
 interface AuthContextValue {
@@ -64,6 +65,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // on this tab would silently see the previous user's cached filters/weights/financial data.
       if (identityChanged) {
         clearPageState();
+      }
+      // The persistent (IndexedDB) caches are wiped on OWNERSHIP mismatch, not
+      // on this tab's identity transitions: identityChanged is also true on
+      // every initial auth resolution (previousUid starts null), and wiping
+      // there would throw away the same user's persisted cache on every
+      // reload — while NOT wiping on first resolution would hand this user
+      // whatever the previous owner of this browser profile left behind.
+      const cacheWiped = await ensureCacheOwner(nextUser?.uid ?? null);
+      if (cacheWiped) {
         clearRankingUniverseCache();
         queryClient.clear();
       }
