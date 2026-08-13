@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { aggregateSentiment, DEFAULT_YEAR_WEIGHTS, METRIC_CATEGORIES, type MetricDefinition, type SentimentLabel } from "@proverbs/shared";
+import { aggregateSentiment, DEFAULT_YEAR_WEIGHTS, MARKET_CAP_INPUT_KEY, METRIC_CATEGORIES, type MetricDefinition, type SentimentLabel } from "@proverbs/shared";
 import { useCompanyDetail } from "../hooks/useCompanyDetail";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { useCustomRankings } from "../hooks/useCustomRankings";
@@ -16,9 +16,13 @@ import { HistoryLineChart } from "../components/charts/HistoryLineChart";
 import { IncomeWaterfall } from "../components/charts/IncomeWaterfall";
 import { PriceHistoryChart } from "../components/charts/PriceHistoryChart";
 import { SentimentSourcePicker } from "../components/sentiment/SentimentSourcePicker";
+import { CapitalAllocationPanel } from "../components/company/CapitalAllocationPanel";
 import { ForensicPanel } from "../components/company/ForensicPanel";
+import { GrowthRoicChart } from "../components/company/GrowthRoicChart";
 import { ReverseDcfPanel } from "../components/company/ReverseDcfPanel";
+import { ScenarioTool } from "../components/company/ScenarioTool";
 import { StatementsExplorer } from "../components/company/StatementsExplorer";
+import { StrategyScorecard } from "../components/company/StrategyScorecard";
 import { MetricInfoLabel } from "../components/metrics/MetricInfoLabel";
 import { cn, formatCurrency, formatNumber, formatPercent } from "../lib/utils";
 
@@ -60,6 +64,15 @@ export function CompanyPage() {
 
   const override = results?.find((r) => r.ticker === ticker.toUpperCase());
   const ranking = override ?? data?.ranking ?? null;
+
+  const latestMetricValues = useMemo<Record<string, number | null>>(() => {
+    const scores = data?.metricScoresByPeriod[0]?.scores ?? {};
+    const values: Record<string, number | null> = Object.fromEntries(
+      Object.entries(scores).map(([key, score]) => [key, score.rawValue]),
+    );
+    values[MARKET_CAP_INPUT_KEY] = data?.company.latest?.marketCap ?? null;
+    return values;
+  }, [data]);
 
   function handleYearsChange(value: number) {
     setYears(value);
@@ -309,6 +322,20 @@ export function CompanyPage() {
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <CapitalAllocationPanel
+          income={data.income}
+          balance={data.balance}
+          cashFlow={data.cashFlow}
+          sector={data.company.sector ?? null}
+        />
+        <StrategyScorecard metricValues={latestMetricValues} />
+        <GrowthRoicChart income={data.income} balance={data.balance} />
+        <ScenarioTool
+          income={data.income}
+          cashFlow={data.cashFlow}
+          sharePrice={data.company.latest?.sharePrice ?? null}
+          sharesOutstanding={data.company.latest?.sharesOutstanding ?? null}
+        />
         <ReverseDcfPanel
           income={data.income}
           balance={data.balance}

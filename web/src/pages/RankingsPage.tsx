@@ -27,10 +27,20 @@ import { WatchlistButton } from "../components/ui/WatchlistButton";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { QualityGrowthScatter, type ScatterDatum } from "../components/charts/QualityGrowthScatter";
 import { TickerHoverLink } from "../components/rankings/TickerHoverLink";
+import { PresetScreens } from "../components/rankings/PresetScreens";
 import { MetricInfoLabel } from "../components/metrics/MetricInfoLabel";
 import { formatCurrency, formatMultiple, formatPercent } from "../lib/utils";
 import { exportRowsAsCsv, exportRowsAsJson, exportRowsAsXlsx } from "../lib/exporters";
-import { evaluateFormula, FormulaError, parseFormula, type FormulaContext } from "../lib/formulaFilter";
+import { loadRankingUniverse } from "../lib/clientRankingEngine";
+import {
+  buildFormulaContext,
+  evaluateFormula,
+  FORMULA_FIELDS,
+  FormulaError,
+  normalizeFieldName,
+  parseFormula,
+  type FormulaContext,
+} from "../lib/formulaFilter";
 
 interface ValueFilters {
   marketCapMinB: string;
@@ -64,6 +74,11 @@ const CATEGORY_LABELS: Record<MetricCategory, string> = {
   moat: "Competitive Moat",
 };
 
+/**
+ * The non-registry fields, plus the camelCase spellings that predate metric
+ * keys being addressable. Every other field in the help popover is generated
+ * from the metric keys actually present in the loaded universe.
+ */
 const FORMULA_FIELD_INFO: Array<{ field: string; description: string; example: string }> = [
   { field: "marketCap", description: "Market capitalization", example: "marketCap > 10B" },
   { field: "roic", description: "Return on invested capital", example: "roic > 15%" },
@@ -80,6 +95,7 @@ const FORMULA_EXAMPLES = [
   "marketCap > 10B AND dividendYield > 2%",
   "overallScore > 70 AND evEbitda < 15",
   "(roic > 12% OR fcfYield > 5%) AND revenueGrowth1y > 0%",
+  "ev_ebit < 10 AND debt_to_ebitda < 2 AND piotroski_f_score >= 7",
   "NOT (peTtm > 30)",
 ];
 
@@ -330,14 +346,96 @@ export function RankingsPage() {
 
   const metricWeightsActive = Object.keys(customConfig.metricWeights ?? {}).length > 0;
 
+  /**
+   * The bulk export's latest-year raw metric values, which is what makes every
+   * registry metric addressable in a formula (the Company docs only carry the
+   * seven headline metrics). Same module-cached fetch the weight sliders use,
+   * so this doesn't cost a second download. A failure here degrades the
+   * formula box to the headline fields rather than breaking the page — the
+   * weights panel already surfaces universe load errors.
+   */
+  const [universeMetrics, setUniverseMetrics] = useState<{
+    keys: string[];
+    byTicker: Map<string, Record<string, number | null>>;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void loadRankingUniverse()
+      .then(({ universe }) => {
+        if (cancelled) return;
+        const byTicker = new Map(universe.map((c) => [c.ticker, c.byYear[0] ?? {}]));
+        setUniverseMetrics({ keys: Object.keys(universe.find((c) => c.byYear[0])?.byYear[0] ?? {}), byTicker });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Everything a formula may name. Registry-driven, never a hardcoded second list. */
+  const formulaFields = useMemo(() => {
+    const fields = new Set<string>(universeMetrics?.keys ?? []);
+    // Fallback/union: keeps metric keys usable in the seconds before the export
+    // lands (or if it fails), where the definitions have already come from Firestore.
+    for (const m of metricDefinitions ?? []) fields.add(m.key);
+    return [...fields];
+  }, [universeMetrics, metricDefinitions]);
+
+  /** Metric fields grouped for the help popover; aliases are listed separately, so skip the keys they duplicate. */
+  const formulaFieldGroups = useMemo(() => {
+    const aliases = new Set<string>(FORMULA_FIELDS);
+    const labels = new Map((metricDefinitions ?? []).map((m) => [m.key, m]));
+    const groups = new Map<MetricCategory, Array<{ key: string; label: string }>>();
+    for (const key of [...formulaFields].sort()) {
+      if (aliases.has(normalizeFieldName(key))) continue;
+      const definition = labels.get(key);
+      if (!definition) continue; // no label to show it under — the registry is the source of names
+      const bucket = groups.get(definition.category) ?? [];
+      bucket.push({ key, label: definition.label });
+      groups.set(definition.category, bucket);
+    }
+    return METRIC_CATEGORIES.filter((c) => groups.has(c)).map((category) => ({
+      category,
+      fields: groups.get(category) as Array<{ key: string; label: string }>,
+    }));
+  }, [formulaFields, metricDefinitions]);
+
   const { formulaNode, formulaError } = useMemo(() => {
     if (!formulaInput.trim()) return { formulaNode: null, formulaError: null };
     try {
-      return { formulaNode: parseFormula(formulaInput), formulaError: null };
+      return { formulaNode: parseFormula(formulaInput, formulaFields), formulaError: null };
     } catch (e) {
       return { formulaNode: null, formulaError: e instanceof FormulaError ? e.message : "Invalid formula" };
     }
-  }, [formulaInput]);
+  }, [formulaInput, formulaFields]);
+
+  /** One evaluation context per company, shared by the formula filter and the preset screens' hit counts. */
+  const formulaContexts = useMemo(() => {
+    const contexts = new Map<string, FormulaContext>();
+    for (const c of companies ?? []) {
+      const headline = c.latest?.headlineMetrics;
+      contexts.set(
+        c.ticker,
+        buildFormulaContext(universeMetrics?.byTicker.get(c.ticker), {
+          marketcap: c.latest?.marketCap ?? null,
+          roic: headline?.roic ?? null,
+          pettm: headline?.peTtm ?? null,
+          evebitda: headline?.evEbitda ?? null,
+          dividendyield: headline?.dividendYield ?? null,
+          fcfyield: headline?.fcfYield ?? null,
+          revenuegrowth1y: headline?.revenueGrowth1y ?? null,
+          overallscore: customOverrideByTicker?.get(c.ticker)?.overallScore ?? c.latest?.overallScore ?? null,
+        }),
+      );
+    }
+    return contexts;
+  }, [companies, universeMetrics, customOverrideByTicker]);
+
+  const presetScreenContexts = useMemo(() => [...formulaContexts.values()], [formulaContexts]);
+
+  function appendFormulaField(field: string) {
+    setFormulaInput((prev) => (prev.trim() ? `${prev.trim()} AND ${field} ` : `${field} `));
+  }
 
   const filteredData = useMemo(() => {
     const rows = companies ?? [];
@@ -364,23 +462,14 @@ export function RankingsPage() {
       if (minRoic !== null && (headline?.roic == null || headline.roic < minRoic)) return false;
 
       if (formulaNode) {
-        const context: FormulaContext = {
-          marketcap: marketCap,
-          roic: headline?.roic ?? null,
-          pettm: headline?.peTtm ?? null,
-          evebitda: headline?.evEbitda ?? null,
-          dividendyield: headline?.dividendYield ?? null,
-          fcfyield: headline?.fcfYield ?? null,
-          revenuegrowth1y: headline?.revenueGrowth1y ?? null,
-          overallscore: customOverrideByTicker?.get(c.ticker)?.overallScore ?? c.latest?.overallScore ?? null,
-        };
-        if (!evaluateFormula(formulaNode, context)) return false;
+        const context = formulaContexts.get(c.ticker);
+        if (!context || !evaluateFormula(formulaNode, context)) return false;
       }
 
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companies, sectorFilter, countryFilter, minCategoryWeightMetrics, activeCategories, rankings, valueFilters, formulaNode, customOverrideByTicker]);
+  }, [companies, sectorFilter, countryFilter, minCategoryWeightMetrics, activeCategories, rankings, valueFilters, formulaNode, formulaContexts, customOverrideByTicker]);
 
   const displayData = useMemo(() => {
     if (!customOverrideByTicker) return filteredData;
@@ -847,6 +936,12 @@ export function RankingsPage() {
             />
             <HelpCircle className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           </div>
+          <PresetScreens
+            contexts={presetScreenContexts}
+            fields={formulaFields}
+            activeFormula={formulaInput}
+            onApply={setFormulaInput}
+          />
           {formulaInput && (
             <Button variant="ghost" size="sm" onClick={() => setFormulaInput("")}>
               Clear
@@ -871,6 +966,39 @@ export function RankingsPage() {
                 </tbody>
               </table>
             </div>
+
+            {formulaFieldGroups.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-foreground">
+                  Every metric ({formulaFieldGroups.reduce((n, g) => n + g.fields.length, 0)}) — click to add
+                </p>
+                <div className="mt-1.5 max-h-56 space-y-2 overflow-y-auto pr-1">
+                  {formulaFieldGroups.map((group) => (
+                    <div key={group.category}>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                        {CATEGORY_LABELS[group.category]}
+                      </p>
+                      <div className="mt-0.5 grid grid-cols-2 gap-x-3">
+                        {group.fields.map((f) => (
+                          <button
+                            key={f.key}
+                            type="button"
+                            title={f.label}
+                            onMouseDown={(e) => {
+                              e.preventDefault(); // keep focus on the input instead of blurring the popup away
+                              appendFormulaField(f.key);
+                            }}
+                            className="truncate rounded px-1 py-0.5 text-left font-mono text-[11px] text-accent hover:bg-surface-hover"
+                          >
+                            {f.key}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <p className="text-xs font-semibold text-foreground">Operators &amp; syntax</p>
               <p className="mt-1 text-xs text-muted-foreground">

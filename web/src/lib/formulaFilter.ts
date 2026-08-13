@@ -14,6 +14,13 @@
  * multiply by 1e9/1e6 (for market cap comparisons like `marketCap > 10B`).
  */
 
+/**
+ * Fields that aren't registry metric keys: company/ranking attributes, plus
+ * the original camelCase spellings kept working for formulas users already
+ * saved. Every registry metric key is addressable too — the caller passes the
+ * keys actually present in the loaded universe to parseFormula, so the field
+ * set tracks the registry instead of a second hardcoded list drifting from it.
+ */
 export const FORMULA_FIELDS = [
   "marketcap",
   "roic",
@@ -25,6 +32,18 @@ export const FORMULA_FIELDS = [
   "overallscore",
 ] as const;
 
+/**
+ * Field names are matched case-insensitively and ignoring underscores, so the
+ * registry key `pe_ttm` and the legacy alias `peTtm` land on the same field
+ * rather than being two spellings a user has to guess between. (They also
+ * hold the same number: headline metrics are read straight out of the same
+ * raw per-year record the universe export ships — see extractHeadlineMetrics.)
+ */
+export function normalizeFieldName(name: string): string {
+  return name.toLowerCase().replace(/_/g, "");
+}
+
+/** Keys are normalized field names (see normalizeFieldName). */
 export type FormulaContext = Record<string, number | null>;
 
 type Comparator = ">" | "<" | ">=" | "<=" | "==" | "!=";
@@ -115,11 +134,22 @@ function parseNumberLiteral(raw: string): number {
   return Number.parseFloat(raw);
 }
 
+function unknownFieldMessage(typed: string, known: Set<string>): string {
+  const normalized = normalizeFieldName(typed);
+  const near = [...known].filter((f) => f.includes(normalized) || normalized.includes(f)).slice(0, 4);
+  if (near.length > 0) return `Unknown field '${typed}'. Did you mean: ${near.join(", ")}?`;
+  // Listing 80 fields in an inline error is unreadable; the help popover shows them grouped.
+  if (known.size <= 12) return `Unknown field '${typed}'. Available: ${[...known].join(", ")}`;
+  return `Unknown field '${typed}'. Use any metric key from the field list (${known.size} available), e.g. roic, pe_ttm, ev_ebit.`;
+}
+
 class Parser {
   private pos = 0;
   private tokens: Token[];
-  constructor(tokens: Token[]) {
+  private knownFields: Set<string>;
+  constructor(tokens: Token[], knownFields: Set<string>) {
     this.tokens = tokens;
+    this.knownFields = knownFields;
   }
 
   private peek(): Token {
@@ -176,11 +206,9 @@ class Parser {
       return node;
     }
     const fieldToken = this.expect("ident");
-    const field = fieldToken.value.toLowerCase();
-    if (!FORMULA_FIELDS.includes(field as (typeof FORMULA_FIELDS)[number])) {
-      throw new FormulaError(
-        `Unknown field '${fieldToken.value}'. Available: ${FORMULA_FIELDS.join(", ")}`,
-      );
+    const field = normalizeFieldName(fieldToken.value);
+    if (!this.knownFields.has(field)) {
+      throw new FormulaError(unknownFieldMessage(fieldToken.value, this.knownFields));
     }
     const comparator = this.expect("comparator").value as Comparator;
     const numberToken = this.expect("number");
@@ -188,11 +216,40 @@ class Parser {
   }
 }
 
-/** Throws FormulaError on invalid syntax or unknown fields — callers should catch and show the message. */
-export function parseFormula(input: string): FormulaNode {
+/**
+ * Throws FormulaError on invalid syntax or unknown fields — callers should
+ * catch and show the message. `extraFields` widens the addressable field set
+ * beyond FORMULA_FIELDS (the Rankings page passes the metric keys present in
+ * the loaded ranking universe); names are normalized, so callers can pass
+ * registry keys verbatim.
+ */
+export function parseFormula(input: string, extraFields: Iterable<string> = []): FormulaNode {
   const trimmed = input.trim();
   if (!trimmed) throw new FormulaError("Formula is empty");
-  return new Parser(tokenize(trimmed)).parseExpr();
+  const known = new Set<string>(FORMULA_FIELDS);
+  for (const f of extraFields) known.add(normalizeFieldName(f));
+  return new Parser(tokenize(trimmed), known).parseExpr();
+}
+
+/**
+ * Assembles an evaluation context from a company's raw metric values plus the
+ * non-registry fields (market cap, overall score, and the legacy aliases). An
+ * alias only overrides a metric value it collides with when it actually has a
+ * number, so a stale null on one side can't blank out data present on the other.
+ */
+export function buildFormulaContext(
+  metricValues: Record<string, number | null> | undefined,
+  aliases: Record<string, number | null>,
+): FormulaContext {
+  const context: FormulaContext = {};
+  for (const [key, value] of Object.entries(metricValues ?? {})) {
+    context[normalizeFieldName(key)] = value ?? null;
+  }
+  for (const [key, value] of Object.entries(aliases)) {
+    const normalized = normalizeFieldName(key);
+    context[normalized] = value ?? context[normalized] ?? null;
+  }
+  return context;
 }
 
 export function evaluateFormula(node: FormulaNode, context: FormulaContext): boolean {
