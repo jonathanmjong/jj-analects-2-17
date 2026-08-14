@@ -53,6 +53,11 @@ export interface SecCompanyBundle {
   approxMarketValue: ApproxMarketValue | null;
 }
 
+/** EDGAR returns `{}` instead of `[]` for a present-but-empty unit series — see parsePublicFloatHistory. */
+function asFactArray(value: unknown): XbrlFact[] {
+  return Array.isArray(value) ? (value as XbrlFact[]) : [];
+}
+
 /**
  * The one annual (10-K) fact per fiscal period end, merged across `tags`.
  *
@@ -86,7 +91,7 @@ function annualFactsByEnd(facts: CompanyFacts | null, tags: string[]): XbrlFact[
   const byEnd = new Map<string, XbrlFact>();
   for (const tag of tags) {
     const units = facts.facts?.["us-gaap"]?.[tag]?.units;
-    const raw = units?.USD ?? units?.["USD/shares"] ?? units?.shares ?? [];
+    const raw = asFactArray(units?.USD ?? units?.["USD/shares"] ?? units?.shares);
     for (const fact of raw) {
       if (fact.form !== "10-K") continue;
       if (fact.start) {
@@ -195,7 +200,10 @@ export function parsePublicFloatHistory(
   isPlausible: (publicFloat: number) => boolean = () => true,
   maxYears: number = FLOAT_HISTORY_MAX_YEARS,
 ): PublicFloatObservation[] {
-  const facts = concept?.units?.USD ?? [];
+  // EDGAR serves an empty *object* rather than an empty array for filers that
+  // have the concept but no usable facts (observed on CTAS), so `?? []` is not
+  // enough — that value isn't nullish and blows up the for-of.
+  const facts = asFactArray(concept?.units?.USD);
 
   const byFiscalYear = new Map<number, XbrlFact>();
   for (const fact of facts) {
@@ -469,7 +477,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
   private hasOperatingFinancials(facts: CompanyFacts | null): boolean {
     const tags = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"];
     return tags.some((tag) =>
-      (facts?.facts?.["us-gaap"]?.[tag]?.units?.USD ?? []).some((f) => f.form === "10-K"),
+      asFactArray(facts?.facts?.["us-gaap"]?.[tag]?.units?.USD).some((f) => f.form === "10-K"),
     );
   }
 
@@ -484,7 +492,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
   private latestRevenue(facts: CompanyFacts | null): number | null {
     const tags = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"];
     for (const tag of tags) {
-      const annual = (facts?.facts?.["us-gaap"]?.[tag]?.units?.USD ?? []).filter((f) => {
+      const annual = asFactArray(facts?.facts?.["us-gaap"]?.[tag]?.units?.USD).filter((f) => {
         if (f.form !== "10-K" || !f.start) return false;
         const days = (new Date(f.end).getTime() - new Date(f.start).getTime()) / 86_400_000;
         return days >= 350 && days <= 380;
@@ -496,11 +504,11 @@ export class SecEdgarProvider extends FinancialDataProvider {
   }
 
   private extractApproxMarketValue(cik: string, facts: CompanyFacts | null): ApproxMarketValue | null {
-    const floatFacts = facts?.facts?.dei?.EntityPublicFloat?.units?.USD ?? [];
+    const floatFacts = asFactArray(facts?.facts?.dei?.EntityPublicFloat?.units?.USD);
     const latestFloat = floatFacts.filter((f) => f.form === "10-K").sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
     if (!latestFloat) return null;
 
-    const sharesFacts = facts?.facts?.dei?.EntityCommonStockSharesOutstanding?.units?.shares ?? [];
+    const sharesFacts = asFactArray(facts?.facts?.dei?.EntityCommonStockSharesOutstanding?.units?.shares);
     const latestShares = sharesFacts.filter((f) => f.form === "10-K").sort((a, b) => (a.filed < b.filed ? 1 : -1))[0];
 
     return {

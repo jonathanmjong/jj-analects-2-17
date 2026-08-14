@@ -45,6 +45,14 @@ const companyFacts = (usGaap: Record<string, XbrlFact[]>): CompanyFacts => ({
 });
 
 describe("parsePublicFloatHistory", () => {
+  it("survives EDGAR serving an empty object instead of an empty fact array", () => {
+    // Observed in production on CTAS: `units.USD` is `{}`, which is not
+    // nullish, so a `?? []` default passes it straight into a for-of.
+    expect(parsePublicFloatHistory({ units: { USD: {} } } as never)).toEqual([]);
+    expect(parsePublicFloatHistory({ units: {} } as never)).toEqual([]);
+    expect(parsePublicFloatHistory(null)).toEqual([]);
+  });
+
   it("returns one observation per fiscal year, oldest first", () => {
     const history = parsePublicFloatHistory(
       floatConcept([
