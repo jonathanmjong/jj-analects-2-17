@@ -18,6 +18,15 @@ service cloud.firestore {
       allow read: if isSubscribed();
       allow write: if false;
 
+      // Own-history valuation series (SEC cover-page public float joined to
+      // that fiscal year's fundamentals). Same gate as every other company
+      // subcollection, declared explicitly ahead of the wildcard so it keeps
+      // its grant if that wildcard is ever narrowed.
+      match /valuationHistory/{fiscalYear} {
+        allow read: if isSubscribed();
+        allow write: if false;
+      }
+
       match /{subcollection}/{docId} {
         allow read: if isSubscribed();
         allow write: if false;

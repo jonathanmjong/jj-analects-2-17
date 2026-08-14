@@ -7,6 +7,7 @@ export { priceHistoryRefresh } from "./scheduled/priceHistoryRefresh.js";
 export { sentimentRefresh } from "./scheduled/sentimentRefresh.js";
 export { quarterlyStatementRefresh } from "./scheduled/quarterlyStatementRefresh.js";
 export { annualStatementRefresh } from "./scheduled/annualStatementRefresh.js";
+export { valuationHistoryRefresh } from "./scheduled/valuationHistoryRefresh.js";
 export { sp500MembershipRefresh } from "./scheduled/sp500MembershipRefresh.js";
 export { expandUniverse } from "./scheduled/expandUniverse.js";
 export { cleanupUniverse } from "./scheduled/cleanupUniverse.js";

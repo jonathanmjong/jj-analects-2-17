@@ -5,6 +5,7 @@ export * from "./forensics.js";
 export * from "./scenario.js";
 export * from "./strategies.js";
 export * from "./valuation.js";
+export * from "./valuationHistory.js";
 export * from "./metrics.js";
 export * from "./metricRationale.js";
 export * from "./momentum.js";

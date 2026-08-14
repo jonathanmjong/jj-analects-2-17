@@ -23,6 +23,7 @@ import { ReverseDcfPanel } from "../components/company/ReverseDcfPanel";
 import { ScenarioTool } from "../components/company/ScenarioTool";
 import { StatementsExplorer } from "../components/company/StatementsExplorer";
 import { StrategyScorecard } from "../components/company/StrategyScorecard";
+import { ValuationHistoryPanel } from "../components/company/ValuationHistoryPanel";
 import { MetricInfoLabel } from "../components/metrics/MetricInfoLabel";
 import { cn, formatCurrency, formatNumber, formatPercent } from "../lib/utils";
 
@@ -322,6 +323,14 @@ export function CompanyPage() {
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <ValuationHistoryPanel
+          ticker={data.company.ticker}
+          sector={data.company.sector ?? null}
+          todayMarketCap={data.company.latest?.marketCap ?? null}
+          income={data.income}
+          balance={data.balance}
+          priceSource={data.company.latest?.priceSource}
+        />
         <CapitalAllocationPanel
           income={data.income}
           balance={data.balance}

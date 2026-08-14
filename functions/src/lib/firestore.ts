@@ -20,6 +20,8 @@ export const collections = {
     db.collection("companies").doc(ticker.toUpperCase()).collection("balanceSheets"),
   cashFlowStatements: (ticker: string) =>
     db.collection("companies").doc(ticker.toUpperCase()).collection("cashFlowStatements"),
+  valuationHistory: (ticker: string) =>
+    db.collection("companies").doc(ticker.toUpperCase()).collection("valuationHistory"),
   historicalMetrics: (ticker: string) =>
     db.collection("companies").doc(ticker.toUpperCase()).collection("historicalMetrics"),
   metricScores: (ticker: string) =>
