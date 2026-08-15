@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { aggregateSentiment, DEFAULT_YEAR_WEIGHTS, MARKET_CAP_INPUT_KEY, METRIC_CATEGORIES, type MetricDefinition, type SentimentLabel } from "@proverbs/shared";
+import { aggregateSentiment, DEFAULT_YEAR_WEIGHTS, isMetricApplicable, MARKET_CAP_INPUT_KEY, METRIC_CATEGORIES, type MetricDefinition, type SentimentLabel } from "@proverbs/shared";
 import { useCompanyDetail } from "../hooks/useCompanyDetail";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { useCustomRankings } from "../hooks/useCustomRankings";
@@ -55,13 +55,19 @@ export function CompanyPage() {
   const { selected: selectedSentimentSources, toggle: toggleSentimentSource } = useSentimentSources();
   const [years, setYears] = useState(5);
 
+  // Metrics are calculated for every company regardless of sector, but ones the
+  // ranking engine treats as inapplicable never reach that company's score —
+  // showing them here would present a number the model itself refuses to use
+  // (a Price/FFO for a software company, a ROIC for a bank).
   const metricsByCategory = useMemo(() => {
+    const sector = data?.company.sector ?? null;
     const map: Record<string, MetricDefinition[]> = {};
     for (const def of metricDefinitions ?? []) {
+      if (!isMetricApplicable(def.key, sector)) continue;
       (map[def.category] ??= []).push(def);
     }
     return map;
-  }, [metricDefinitions]);
+  }, [metricDefinitions, data]);
 
   const override = results?.find((r) => r.ticker === ticker.toUpperCase());
   const ranking = override ?? data?.ranking ?? null;
