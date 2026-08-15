@@ -276,6 +276,66 @@ export function parseAnnualFundamentalsHistory(
 }
 
 /**
+ * Depreciation & amortization, in tag-precedence order.
+ *
+ * Filers genuinely split across these two tags with no way to predict which one a given company
+ * uses: SPG (CIK 0001063761) reports only `DepreciationAndAmortization` (no
+ * `DepreciationDepletionAndAmortization` concept at all), while Vornado (CIK 0000899689) reports
+ * BOTH in the same filing, at slightly different values (FY2025: 481,456,000 vs 462,201,000).
+ * Order therefore matters, and `DepreciationDepletionAndAmortization` is first because it is the
+ * broader concept — it is the total charge as presented in the cash flow statement, whereas a
+ * filer reporting both typically uses the narrower `DepreciationAndAmortization` for a component
+ * of it. Taking the broader tag keeps the add-back consistent with what the cash flow statement
+ * actually reconciles.
+ *
+ * annualFactsByEnd merges across tags and dedups per period end on `filed` date, so within a
+ * single filing (one `filed` date for every tag) this array's order decides the winner; a later
+ * restatement of either tag still wins over an earlier filing, which is the intended behavior
+ * everywhere else in this file.
+ */
+export const DEPRECIATION_AND_AMORTIZATION_TAGS = ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization"];
+
+/**
+ * Pure parse of a companyfacts response into annual cash flow statements. Exported (rather than
+ * living only as a private method) so the tag-merge behavior above is testable without HTTP —
+ * same convention as parsePublicFloatHistory / parseAnnualFundamentalsHistory.
+ */
+export function parseAnnualCashFlowStatements(
+  facts: CompanyFacts | null,
+  periods: number,
+  sourceProvider: string,
+): CashFlowStatement[] {
+  const ocf = annualSeries(facts, ["NetCashProvidedByUsedInOperatingActivities"], periods);
+  const capex = annualSeries(facts, ["PaymentsToAcquirePropertyPlantAndEquipment"], periods);
+  const dividends = annualSeries(facts, ["PaymentsOfDividends"], periods);
+  const buybacks = annualSeries(facts, ["PaymentsForRepurchaseOfCommonStock"], periods);
+  const issuance = annualSeries(facts, ["ProceedsFromIssuanceOfCommonStock"], periods);
+  const depreciation = annualSeries(facts, DEPRECIATION_AND_AMORTIZATION_TAGS, periods);
+
+  const years = topYears(ocf, periods);
+  return years.map((fy) => {
+    const operatingCashFlow = ocf.get(fy) ?? null;
+    const capexVal = capex.get(fy) ?? null;
+    return {
+      periodKey: `${fy}-FY`,
+      periodType: "FY" as const,
+      fiscalYear: fy,
+      periodEnd: `${fy}-12-31`,
+      filedAt: null,
+      sourceProvider,
+      operatingCashFlow,
+      capitalExpenditures: capexVal !== null ? -Math.abs(capexVal) : null,
+      freeCashFlow: operatingCashFlow !== null && capexVal !== null ? operatingCashFlow - Math.abs(capexVal) : null,
+      dividendsPaid: dividends.get(fy) !== undefined ? -Math.abs(dividends.get(fy) as number) : null,
+      stockBuybacks: buybacks.get(fy) !== undefined ? -Math.abs(buybacks.get(fy) as number) : null,
+      stockIssuance: issuance.get(fy) ?? null,
+      netDebtIssuance: null,
+      depreciationAndAmortization: depreciation.get(fy) ?? null,
+    };
+  });
+}
+
+/**
  * SEC EDGAR adapter — free, keyless, but rate-limited (SEC asks for <=10
  * req/sec and a descriptive User-Agent identifying the requester). Used as
  * the ground-truth fallback / cross-check source for XBRL financial
@@ -436,32 +496,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
   }
 
   private extractCashFlowStatements(facts: CompanyFacts | null, periods: number): CashFlowStatement[] {
-    const ocf = annualSeries(facts, ["NetCashProvidedByUsedInOperatingActivities"], periods);
-    const capex = annualSeries(facts, ["PaymentsToAcquirePropertyPlantAndEquipment"], periods);
-    const dividends = annualSeries(facts, ["PaymentsOfDividends"], periods);
-    const buybacks = annualSeries(facts, ["PaymentsForRepurchaseOfCommonStock"], periods);
-    const issuance = annualSeries(facts, ["ProceedsFromIssuanceOfCommonStock"], periods);
-
-    const years = topYears(ocf, periods);
-    return years.map((fy) => {
-      const operatingCashFlow = ocf.get(fy) ?? null;
-      const capexVal = capex.get(fy) ?? null;
-      return {
-        periodKey: `${fy}-FY`,
-        periodType: "FY" as const,
-        fiscalYear: fy,
-        periodEnd: `${fy}-12-31`,
-        filedAt: null,
-        sourceProvider: this.name,
-        operatingCashFlow,
-        capitalExpenditures: capexVal !== null ? -Math.abs(capexVal) : null,
-        freeCashFlow: operatingCashFlow !== null && capexVal !== null ? operatingCashFlow - Math.abs(capexVal) : null,
-        dividendsPaid: dividends.get(fy) !== undefined ? -Math.abs(dividends.get(fy) as number) : null,
-        stockBuybacks: buybacks.get(fy) !== undefined ? -Math.abs(buybacks.get(fy) as number) : null,
-        stockIssuance: issuance.get(fy) ?? null,
-        netDebtIssuance: null,
-      };
-    });
+    return parseAnnualCashFlowStatements(facts, periods, this.name);
   }
 
   /**

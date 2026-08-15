@@ -136,6 +136,16 @@ export const METRIC_RATIONALE: Record<string, MetricRationaleEntry> = {
     rationale:
       "How much free cash a company generates relative to its price — a direct \"return\" investors are effectively buying. Free cash flow is harder to manipulate than reported earnings, making this one of the more trusted value signals.",
   },
+  ffo_yield: {
+    verdict: "supporting",
+    rationale:
+      "The yield framing of the multiple real-estate investors actually use. P/E is excluded for this sector because reported earnings are dominated by depreciation on properties that often appreciate; adding that charge back is what FFO does. Approximate FFO here: net income plus depreciation and amortization — it excludes property-sale gains and impairments, which this data source does not carry, so a year with large disposals reads high. Supporting rather than core for exactly that reason: the frame is the right one for the sector, the figure is an approximation of it. Only applies to Real Estate (see sectorApplicability.ts).",
+  },
+  price_to_ffo: {
+    verdict: "supporting",
+    rationale:
+      "The real-estate sector's standard valuation multiple, and this app's replacement for the P/E it excludes there. Same approximation as FFO Yield: net income plus depreciation and amortization, without the property-sale-gain and impairment adjustments the NAREIT definition includes — read it as an estimate of the multiple, not a reported one, and alongside P/B and EV/EBITDA rather than alone. Suppressed entirely when approximate FFO is zero or negative, since a negative multiple describes nothing. Only applies to Real Estate (see sectorApplicability.ts).",
+  },
   shareholder_yield_valuation: {
     verdict: "supporting",
     rationale:

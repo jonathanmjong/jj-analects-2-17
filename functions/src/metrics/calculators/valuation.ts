@@ -11,6 +11,37 @@ export const priceToTangibleBook: MetricCalculator = (i) => safeDiv(i.marketCap,
 /** Greenblatt-style earnings yield: EBIT / Enterprise Value. */
 export const earningsYield: MetricCalculator = (i) => safeDiv(i.current.income.ebit, i.enterpriseValue);
 export const fcfYield: MetricCalculator = (i) => safeDiv(i.current.cashFlow.freeCashFlow, i.marketCap);
+/**
+ * APPROXIMATE funds from operations: net income plus depreciation and amortization.
+ *
+ * NAREIT's definition also subtracts gains on property sales and adds back impairments. This
+ * dataset carries neither line item, so the figure below is an approximation and is described as
+ * one everywhere it surfaces (metric description, rationale). It is not, and must not be
+ * presented as, a reported FFO number: for a REIT that sold properties at a gain during the
+ * period it reads high, since that one-off gain stays in net income.
+ *
+ * Null unless BOTH inputs are present — a missing D&A add-back would silently degrade to plain
+ * net income, which is exactly the figure FFO exists to replace. Statements written before D&A
+ * ingestion shipped therefore produce null here rather than a wrong number.
+ */
+export function approximateFfo(netIncome: number | null, depreciationAndAmortization: number | null | undefined): number | null {
+  if (netIncome === null || depreciationAndAmortization === null || depreciationAndAmortization === undefined) return null;
+  return netIncome + depreciationAndAmortization;
+}
+
+export const ffoYield: MetricCalculator = (i) => {
+  const ffo = approximateFfo(i.current.income.netIncome, i.current.cashFlow.depreciationAndAmortization);
+  if (ffo === null || i.marketCap === null || i.marketCap <= 0) return null;
+  return ffo / i.marketCap;
+};
+
+/** Null on non-positive FFO: a negative price-to-FFO is not a cheaper REIT, it's an unpriceable one. */
+export const priceToFfo: MetricCalculator = (i) => {
+  const ffo = approximateFfo(i.current.income.netIncome, i.current.cashFlow.depreciationAndAmortization);
+  if (ffo === null || ffo <= 0 || i.marketCap === null || i.marketCap <= 0) return null;
+  return i.marketCap / ffo;
+};
+
 export const shareholderYield: MetricCalculator = (i) => {
   const { dividendsPaid, stockBuybacks, stockIssuance } = i.current.cashFlow;
   if (i.marketCap === null || i.marketCap === 0) return null;

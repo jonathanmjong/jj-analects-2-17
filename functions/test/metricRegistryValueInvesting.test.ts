@@ -6,6 +6,7 @@ import {
   DEFAULT_RANKING_CONFIG,
   getMetricRationale,
   METRIC_CATEGORIES,
+  SECTOR_RESTRICTED_METRICS,
 } from "@proverbs/shared";
 import { METRIC_DEFINITIONS } from "../src/metrics/definitions.js";
 
@@ -87,6 +88,10 @@ describe("metric registry — negativeIsBad correctness", () => {
     "price_tangible_book",
     "debt_to_equity",
     "debt_to_ebitda",
+    // Its calculator suppresses non-positive FFO outright, so a negative value can't currently
+    // reach the ranker — the flag is here so it stays impossible to rank a negative-FFO REIT as
+    // the cheapest one if that guard is ever loosened.
+    "price_to_ffo",
   ]);
 
   // Metrics where "asc" (lower raw value is better) genuinely includes negative as the GOOD
@@ -170,10 +175,14 @@ describe("metric registry — weighting reflects the stated value-investing phil
     expect(negativeIsBadMetrics.length).toBeGreaterThan(0);
 
     for (const metric of negativeIsBadMetrics) {
+      // A sector-restricted metric (shared/src/sectorApplicability.ts) is inapplicable to a
+      // sector-less company by design, so the synthetic universe has to carry a sector the
+      // metric actually applies to or the engine correctly refuses to rank it at all.
+      const sector = SECTOR_RESTRICTED_METRICS.find((g) => g.metricKeys.includes(metric.key))?.sectors[0] ?? null;
       const universe: UniverseCompanyData[] = [
-        { ticker: "PROFITABLE", sector: null, byYear: [{ [metric.key]: 5 }] },
-        { ticker: "EXPENSIVE_BUT_PROFITABLE", sector: null, byYear: [{ [metric.key]: 50 }] },
-        { ticker: "DEEP_LOSSES", sector: null, byYear: [{ [metric.key]: -500 }] },
+        { ticker: "PROFITABLE", sector, byYear: [{ [metric.key]: 5 }] },
+        { ticker: "EXPENSIVE_BUT_PROFITABLE", sector, byYear: [{ [metric.key]: 50 }] },
+        { ticker: "DEEP_LOSSES", sector, byYear: [{ [metric.key]: -500 }] },
       ];
       const config = {
         ...DEFAULT_RANKING_CONFIG,
@@ -211,6 +220,10 @@ describe("metric registry — direction matches value-investing logic, not just 
     earnings_yield: "desc",
     fcf_yield: "desc",
     shareholder_yield_valuation: "desc",
+    // Real-estate-only multiples (see functions/test/ffoMetrics.test.ts): same "cheaper is
+    // better" logic as the P/E they stand in for — a higher FFO yield, a lower price/FFO.
+    ffo_yield: "desc",
+    price_to_ffo: "asc",
     // Momentum: not a value signal (0% default weight), but "higher return is better momentum"
     // is still the internally-correct direction for what the metric measures.
     momentum_12m1m: "desc",

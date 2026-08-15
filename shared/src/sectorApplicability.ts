@@ -2,6 +2,13 @@
  * Which metrics are *structurally inapplicable* to a sector — not "usually missing", but
  * meaningless if they happened to compute.
  *
+ * Two directions, both resolved by inapplicabilityReason():
+ *   - EXCLUDED (SECTOR_INAPPLICABLE_METRICS): a general-purpose metric that breaks down for one
+ *     sector. Applicable everywhere else, including for companies with no sector on record.
+ *   - RESTRICTED (SECTOR_RESTRICTED_METRICS): a sector-specific metric that only describes one
+ *     sector — the inverse case, listed once by the sectors it applies TO rather than by every
+ *     sector it doesn't.
+ *
  * Banks, insurers and REITs make up roughly a fifth of a 1,300-name mid/large-cap universe, and
  * most of the registry's operating-company metrics either don't compute for them (the line items
  * don't exist) or compute into a number that doesn't describe the business. Without this layer
@@ -88,6 +95,34 @@ export const SECTOR_INAPPLICABLE_METRICS: Record<string, InapplicableMetricGroup
 };
 
 /**
+ * The inverse of SECTOR_INAPPLICABLE_METRICS: metrics built on one sector's own reporting
+ * convention, which describe nothing outside it. Listing them by the sectors they apply TO keeps
+ * a sector-specific metric from having to be repeated under every other sector — and keeps the
+ * default for a new sector-specific metric at "restricted", not "applied to all 1,300 names".
+ *
+ * The bar is the same as the exclusion list's, read the other way round: a metric belongs here
+ * only when the number it produces outside its sectors describes nothing real (a software
+ * company's price-to-FFO is just its P/E with depreciation added back for no reason), never
+ * merely because the metric is most *interesting* in one sector.
+ */
+export interface RestrictedMetricGroup {
+  /** Canonical sector names — exactly the values canonicalSector() produces (see SECTOR_ALIASES). */
+  sectors: string[];
+  /** Same neutral, plain-language contract as InapplicableMetricGroup.reason. */
+  reason: string;
+  metricKeys: string[];
+}
+
+export const SECTOR_RESTRICTED_METRICS: RestrictedMetricGroup[] = [
+  {
+    sectors: ["Real Estate"],
+    reason:
+      "funds from operations is a real-estate reporting convention — it adds back property depreciation, which is only the dominant non-cash charge when the company's principal assets are properties",
+    metricKeys: ["ffo_yield", "price_to_ffo"],
+  },
+];
+
+/**
  * Sector strings reach the engine from two providers that disagree on wording (SEC EDGAR's SIC
  * mapping says "Financials", Yahoo's profile says "Financial Services"), so match on a normalized
  * form. Anything unrecognized falls through to "no sector applicability rules", which is the safe
@@ -121,13 +156,51 @@ const REASON_BY_SECTOR: Map<string, Map<string, string>> = new Map(
   ]),
 );
 
+const RESTRICTED_BY_METRIC: Map<string, RestrictedMetricGroup> = new Map(
+  SECTOR_RESTRICTED_METRICS.flatMap((group) => group.metricKeys.map((key) => [key, group] as const)),
+);
+
+/**
+ * Appended when a *restricted* metric meets a company carrying no sector at all. The two
+ * directions treat a missing sector oppositely, on purpose:
+ *
+ *   - An EXCLUDED metric stays applicable, because dropping it would remove real information
+ *     from a company on nothing more than a missing sector label — the "never penalize unknown"
+ *     rule.
+ *   - A RESTRICTED metric is withheld, because applying it requires positive evidence that the
+ *     company is one of the sectors it describes, and "no sector on record" is not that
+ *     evidence. Withholding costs the company nothing: an inapplicable metric leaves the
+ *     coverage denominator as well as the score, and keeps the company out of the metric's peer
+ *     distribution — so a sector-less name is neither scored on nor scored against a REIT-only
+ *     multiple, and doesn't dilute the REIT peer group either.
+ */
+const NO_SECTOR_CLAUSE = ", and this company has no sector on record to check it against";
+
+/** True when the provider gave us *something*, whether or not this module recognizes the wording. */
+function hasSectorOnRecord(sector: string | null | undefined): boolean {
+  return typeof sector === "string" && sector.trim() !== "";
+}
+
 /**
  * The short plain-language reason this metric is structurally inapplicable to this sector, or
- * null when it applies normally. A null/unknown sector always returns null — never penalize a
- * company for a sector we don't have on record.
+ * null when it applies normally.
+ *
+ * For an excluded metric an unrecognized or missing sector always returns null — never penalize
+ * a company for a sector we can't read. For a restricted metric the same sector returns a reason
+ * instead, since only a positive sector match can make it applicable; see NO_SECTOR_CLAUSE for
+ * why the asymmetry is deliberate. Note SECTOR_ALIASES only recognizes the gated sectors, so a
+ * "Technology" company and a sector-less one both canonicalize to null — they differ only in
+ * which reason text they get back.
  */
 export function inapplicabilityReason(metricKey: string, sector: string | null): string | null {
   const canonical = canonicalSector(sector);
+
+  const restricted = RESTRICTED_BY_METRIC.get(metricKey);
+  if (restricted) {
+    if (canonical !== null && restricted.sectors.includes(canonical)) return null;
+    return hasSectorOnRecord(sector) ? restricted.reason : `${restricted.reason}${NO_SECTOR_CLAUSE}`;
+  }
+
   if (canonical === null) return null;
   return REASON_BY_SECTOR.get(canonical)?.get(metricKey) ?? null;
 }

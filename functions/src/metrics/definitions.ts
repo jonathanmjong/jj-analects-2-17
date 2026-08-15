@@ -28,6 +28,11 @@ const entries: MetricEntry[] = [
   { definition: { key: "earnings_yield", label: "Earnings Yield", category: "valuation", direction: "desc", unit: "percent", description: "EBIT divided by enterprise value.", enabled: true }, calculator: valuation.earningsYield },
   { definition: { key: "fcf_yield", label: "FCF Yield", category: "valuation", direction: "desc", unit: "percent", description: "Free cash flow divided by market cap.", enabled: true }, calculator: valuation.fcfYield },
   { definition: { key: "shareholder_yield_valuation", label: "Shareholder Yield", category: "valuation", direction: "desc", unit: "percent", description: "Dividends + buybacks - issuance, divided by market cap.", enabled: true }, calculator: valuation.shareholderYield },
+  // Real Estate only — see SECTOR_RESTRICTED_METRICS in shared/src/sectorApplicability.ts. Both
+  // use an approximate FFO (net income + D&A); the description says so, since the NAREIT
+  // definition's property-sale-gain and impairment adjustments aren't in this dataset.
+  { definition: { key: "ffo_yield", label: "FFO Yield (approx.)", category: "valuation", direction: "desc", unit: "percent", description: "Approximate funds from operations divided by market cap. Approximate FFO: net income plus depreciation and amortization; excludes property-sale gains and impairments, which this data source does not carry.", enabled: true }, calculator: valuation.ffoYield },
+  { definition: { key: "price_to_ffo", label: "Price / FFO (approx.)", category: "valuation", direction: "asc", unit: "multiple", description: "Market cap divided by approximate funds from operations. Approximate FFO: net income plus depreciation and amortization; excludes property-sale gains and impairments, which this data source does not carry.", enabled: true, negativeIsBad: true }, calculator: valuation.priceToFfo },
 
   // --- Momentum ---
   { definition: { key: "momentum_12m1m", label: "12-1 Month Momentum", category: "momentum", direction: "desc", unit: "percent", description: "Trailing 12-month return excluding the most recent month (price 1 month ago vs. 12 months ago).", enabled: true }, calculator: momentum.return12m1m },

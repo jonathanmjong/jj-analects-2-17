@@ -53,6 +53,14 @@ export interface BalanceSheet extends StatementPeriodMeta {
 export interface CashFlowStatement extends StatementPeriodMeta {
   operatingCashFlow: number | null;
   capitalExpenditures: number | null;
+  /**
+   * Optional rather than `number | null` because every statement written before this field
+   * existed (2026-08) genuinely lacks the key — a Firestore document read back as a
+   * CashFlowStatement will have it `undefined` until the statement-refresh jobs re-run, and
+   * providers that don't carry the line item never set it. Consumers must treat undefined and
+   * null identically (`?? null`), never assume a number is present.
+   */
+  depreciationAndAmortization?: number | null;
   freeCashFlow: number | null;
   dividendsPaid: number | null;
   stockBuybacks: number | null;
