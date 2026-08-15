@@ -1,4 +1,5 @@
 import type { BalanceSheet, CashFlowStatement, IncomeStatement } from "@proverbs/shared";
+import { log } from "../lib/logger.js";
 import { FinancialDataProvider, type CompanyProfileResult, type ProviderCapabilities } from "./FinancialDataProvider.js";
 import { sectorFromSicCode } from "./sicSectorMap.js";
 import { resolveCountry } from "./usStateCodes.js";
@@ -105,15 +106,111 @@ function annualFactsByEnd(facts: CompanyFacts | null, tags: string[]): XbrlFact[
   return [...byEnd.values()].sort((a, b) => a.end.localeCompare(b.end));
 }
 
-/** Latest annual (10-K) value per tag, most recent `periods` fiscal years. */
-function annualSeries(facts: CompanyFacts | null, tags: string[], periods: number): Map<number, number> {
+function seriesByFiscalYear(annualFacts: XbrlFact[], periods: number): Map<number, number> {
   const out = new Map<number, number>();
-  for (const fact of annualFactsByEnd(facts, tags)) {
+  // Ascending by `end`, so for the rare filer with two annual period ends inside one
+  // calendar year (fiscal-year-end change) the later period wins that year's slot.
+  for (const fact of annualFacts) {
     out.set(new Date(fact.end).getUTCFullYear(), fact.val);
   }
   // Trim to the most recent `periods` derived fiscal years — topYears() would do this anyway,
   // but callers other than topYears (e.g. size checks) expect this cap to already hold.
   return new Map([...out.entries()].sort((a, b) => b[0] - a[0]).slice(0, periods));
+}
+
+/** Latest annual (10-K) value per tag, most recent `periods` fiscal years. */
+function annualSeries(facts: CompanyFacts | null, tags: string[], periods: number): Map<number, number> {
+  return seriesByFiscalYear(annualFactsByEnd(facts, tags), periods);
+}
+
+/**
+ * STRICT per-period tag precedence — for concepts where different tags carry a
+ * different ACCOUNTING BASIS and must never be blended.
+ *
+ * annualFactsByEnd merges its `tags` into one pool and resolves a per-period
+ * collision by "later `filed` wins". That is right when the tags are synonyms
+ * for the same figure (a filer migrating `Revenues` -> `RevenueFrom...`), but
+ * wrong when they are not: within a single filing every tag shares one `filed`
+ * date, so the winner would come down to array/tag iteration order. For net
+ * income that would silently swap accounting bases on companies that are
+ * already CORRECT — verified live on EDGAR, PLD/DUK/D/KIM/PSA/DLR all report
+ * NetIncomeLoss, NetIncomeLossAvailableToCommonStockholdersBasic AND ProfitLoss
+ * for the same period end at three different values.
+ *
+ * So: resolve each fiscal period end independently, taking the first tag in
+ * `orderedTags` that has a qualifying fact for that period, and never let a
+ * later tag displace an earlier one. Each tag is passed through
+ * annualFactsByEnd ALONE, so all of its selection rules (10-K only, 350-380 day
+ * duration, dedupe on `end`, later-`filed`-wins) still apply — but only ever
+ * within a single tag, which is the only place they are safe.
+ *
+ * Returns the winning fact per period plus the tag that supplied it (ascending
+ * by period end); the tag is carried for provenance/logging.
+ */
+function annualFactsByEndWithFallback(
+  facts: CompanyFacts | null,
+  orderedTags: string[],
+): { fact: XbrlFact; tag: string }[] {
+  const byEnd = new Map<string, { fact: XbrlFact; tag: string }>();
+  for (const tag of orderedTags) {
+    for (const fact of annualFactsByEnd(facts, [tag])) {
+      if (!byEnd.has(fact.end)) byEnd.set(fact.end, { fact, tag });
+    }
+  }
+  return [...byEnd.values()].sort((a, b) => a.fact.end.localeCompare(b.fact.end));
+}
+
+/** annualSeries, but resolving `orderedTags` by strict per-period precedence. */
+function annualSeriesWithFallback(
+  facts: CompanyFacts | null,
+  orderedTags: string[],
+  periods: number,
+): Map<number, number> {
+  return seriesByFiscalYear(
+    annualFactsByEndWithFallback(facts, orderedTags).map((r) => r.fact),
+    periods,
+  );
+}
+
+/**
+ * Net income, in strict per-period precedence order (see
+ * annualFactsByEndWithFallback for why this must not be a plain tag merge).
+ *
+ * 1. `NetIncomeLoss` — net income attributable to the parent. What every
+ *    currently-correct company in this dataset already resolves to; it must
+ *    never be displaced by a fallback.
+ * 2. `NetIncomeLossAvailableToCommonStockholdersBasic` — after preferred
+ *    dividends, i.e. attributable to common. The better match for a
+ *    market-cap-based multiple, since market cap prices common equity, so it
+ *    ranks above the NCI-inclusive figure.
+ * 3. `ProfitLoss` — INCLUDES noncontrolling interests, so it overstates the
+ *    parent's share. Last resort: better than a null, but never preferred.
+ *
+ * Filers do drop off tag 1 mid-history rather than never using it: verified on
+ * EDGAR, EXC's last `NetIncomeLoss` is FY2012, VTR's FY2009, ETR's FY2023 —
+ * while SPG (CIK 0001063761) has none at all. Per-period resolution is what
+ * keeps those old years on the parent-only basis while filling the recent ones,
+ * instead of restating a company's whole history onto whichever basis happens
+ * to cover the latest year.
+ */
+export const NET_INCOME_TAGS = [
+  "NetIncomeLoss",
+  "NetIncomeLossAvailableToCommonStockholdersBasic",
+  "ProfitLoss",
+];
+
+/**
+ * Distinct tags that supplied a value within the same most-recent-`periods` window
+ * annualSeriesWithFallback returns, in precedence order. Provenance for logging only — a filer that
+ * used a fallback only in years that got trimmed away is not interesting.
+ */
+function tagsUsed(facts: CompanyFacts | null, orderedTags: string[], periods: number): string[] {
+  const resolved = annualFactsByEndWithFallback(facts, orderedTags);
+  const kept = new Set(seriesByFiscalYear(resolved.map((r) => r.fact), periods).keys());
+  const used = new Set(
+    resolved.filter((r) => kept.has(new Date(r.fact.end).getUTCFullYear())).map((r) => r.tag),
+  );
+  return orderedTags.filter((tag) => used.has(tag));
 }
 
 /**
@@ -235,7 +332,7 @@ export function parseAnnualFundamentalsHistory(
   years = FLOAT_HISTORY_MAX_YEARS,
 ): AnnualFundamentalsObservation[] {
   const revenueTags = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"];
-  const netIncome = annualSeries(facts, ["NetIncomeLoss"], years);
+  const netIncome = annualSeriesWithFallback(facts, NET_INCOME_TAGS, years);
   const revenue = annualSeries(facts, revenueTags, years);
   const totalEquity = annualSeries(facts, ["StockholdersEquity"], years);
   const operatingIncome = annualSeries(facts, ["OperatingIncomeLoss"], years);
@@ -246,7 +343,10 @@ export function parseAnnualFundamentalsHistory(
   // Duration concepts first — their `end` IS the fiscal year end. Instant
   // (balance-sheet) concepts share that date, and only fill gaps for a year
   // where no income-statement tag was reported at all.
-  const periodEnds = annualPeriodEnds(facts, [...revenueTags, "NetIncomeLoss", "OperatingIncomeLoss"]);
+  // All net income tags, not just NetIncomeLoss: a filer that reports only ProfitLoss would
+  // otherwise have no period end at all for that year. Safe to plain-merge here because only the
+  // `end` DATE is read — the values (and therefore the accounting-basis hazard) never enter.
+  const periodEnds = annualPeriodEnds(facts, [...revenueTags, ...NET_INCOME_TAGS, "OperatingIncomeLoss"]);
   const instantEnds = annualPeriodEnds(facts, ["StockholdersEquity", "Assets"]);
 
   const allYears = new Set<number>([
@@ -410,7 +510,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
     return (await res.json()) as SubmissionJson;
   }
 
-  private extractIncomeStatements(facts: CompanyFacts | null, periods: number): IncomeStatement[] {
+  private extractIncomeStatements(facts: CompanyFacts | null, periods: number, ticker?: string): IncomeStatement[] {
     const revenue = annualSeries(facts, ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"], periods);
     const grossProfit = annualSeries(facts, ["GrossProfit"], periods);
     const rnd = annualSeries(facts, ["ResearchAndDevelopmentExpense"], periods);
@@ -418,9 +518,19 @@ export class SecEdgarProvider extends FinancialDataProvider {
     const interestExpense = annualSeries(facts, ["InterestExpense"], periods);
     const pretax = annualSeries(facts, ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"], periods);
     const tax = annualSeries(facts, ["IncomeTaxExpenseBenefit"], periods);
-    const netIncome = annualSeries(facts, ["NetIncomeLoss"], periods);
+    const netIncome = annualSeriesWithFallback(facts, NET_INCOME_TAGS, periods);
     const epsDiluted = annualSeries(facts, ["EarningsPerShareDiluted"], periods);
     const dilutedShares = annualSeries(facts, ["WeightedAverageNumberOfDilutedSharesOutstanding"], periods);
+
+    // Net income is the most load-bearing field in the dataset (P/E, every margin, growth CAGRs,
+    // F-Score). Nothing records WHICH basis it came from — see the IncomeStatement shape — so at
+    // least leave the provenance in the logs for the ~10% of filers that need a fallback.
+    if (ticker) {
+      const netIncomeTags = tagsUsed(facts, NET_INCOME_TAGS, periods);
+      if (netIncomeTags.some((tag) => tag !== NET_INCOME_TAGS[0])) {
+        log.info(`extractIncomeStatements(${ticker}): net income resolved from ${netIncomeTags.join(" + ")}`);
+      }
+    }
 
     const years = topYears(revenue.size ? revenue : netIncome, periods);
     return years.map((fy) => ({
@@ -627,7 +737,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
 
   async getIncomeStatements(ticker: string, periods: number): Promise<IncomeStatement[]> {
     const cik = await this.cikFor(ticker);
-    return this.extractIncomeStatements(cik ? await this.fetchCompanyFacts(cik) : null, periods);
+    return this.extractIncomeStatements(cik ? await this.fetchCompanyFacts(cik) : null, periods, ticker);
   }
 
   async getBalanceSheets(ticker: string, periods: number): Promise<BalanceSheet[]> {
@@ -655,7 +765,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
       ticker: ticker.toUpperCase(),
       cik,
       profile: this.buildProfile(ticker, cik, submission),
-      income: this.extractIncomeStatements(facts, periods),
+      income: this.extractIncomeStatements(facts, periods, ticker),
       balance: this.extractBalanceSheets(facts, periods),
       cashFlow: this.extractCashFlowStatements(facts, periods),
       approxMarketValue: this.extractApproxMarketValue(cik, facts),
