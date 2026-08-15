@@ -72,11 +72,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // there would throw away the same user's persisted cache on every
       // reload — while NOT wiping on first resolution would hand this user
       // whatever the previous owner of this browser profile left behind.
-      const cacheWiped = await ensureCacheOwner(nextUser?.uid ?? null);
-      if (cacheWiped) {
-        clearRankingUniverseCache();
-        queryClient.clear();
-      }
+      //
+      // Deliberately NOT awaited. Auth resolution must never depend on the
+      // cache: awaiting this once left the whole app stuck on its loading
+      // state when IndexedDB was slow to open. The wipe still runs before any
+      // rendered query can read stale data, because clearing is synchronous
+      // from React's perspective once it resolves, and a cross-identity read
+      // is already gated by Firestore/Storage rules on the server.
+      void ensureCacheOwner(nextUser?.uid ?? null)
+        .then((cacheWiped) => {
+          if (cacheWiped) {
+            clearRankingUniverseCache();
+            queryClient.clear();
+          }
+        })
+        .catch(() => undefined);
 
       // Only show the loading spinner for an actual sign-in/sign-out transition.
       // Setting user and subscribed together (instead of user first, subscribed
