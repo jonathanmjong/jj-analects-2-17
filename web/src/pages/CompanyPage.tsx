@@ -274,6 +274,17 @@ export function CompanyPage() {
             <p className="text-xs text-muted-foreground">
               Based on {peers?.length ?? 0} companies currently ingested in this sector.
             </p>
+            {ranking?.coverage && (
+              <p className="text-xs text-muted-foreground">
+                Score coverage:{" "}
+                <span className={ranking.coverage.tier === "thin" ? "text-negative" : undefined}>
+                  {ranking.coverage.metricsIncluded} of {ranking.coverage.metricsApplicable} applicable metrics
+                </span>
+                {ranking.coverage.tier === "thin" && " — this score rests on a small share of the model, so treat it as weaker evidence than a fully covered company's."}
+                {ranking.coverage.metricsApplicable < 60 &&
+                  ` Metrics that don't apply to ${company.sector ?? "this sector"} are excluded from the total rather than counted as missing.`}
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>

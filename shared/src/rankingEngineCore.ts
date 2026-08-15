@@ -2,8 +2,9 @@ import type { HeadlineMetrics } from "./company.js";
 import type { MetricCategory, MetricDefinition } from "./metrics.js";
 import { DEFAULT_YEAR_WEIGHTS, METRIC_CATEGORIES } from "./metrics.js";
 import { getMetricRationale, type MetricVerdict } from "./metricRationale.js";
-import type { CategoryScore, RankingResult, RankingWeightsConfig } from "./ranking.js";
+import type { CategoryScore, CoverageTier, RankingResult, RankingWeightsConfig, ScoreCoverage } from "./ranking.js";
 import { percentileRanks, weightedAverage, winsorize, zscoreToUnitScore, zscores } from "./rankingMath.js";
+import { isMetricApplicable } from "./sectorApplicability.js";
 
 export interface UniverseCompanyData {
   ticker: string;
@@ -124,6 +125,39 @@ function computeGroupResult(
   return { scoreByTicker, rankByTicker, peerCount: entries.length };
 }
 
+/**
+ * Minimum included/applicable ratio for each coverage tier. The cut points are judgement calls,
+ * not derived: 0.7 is "most of what could be measured was measured", 0.4 is "enough to compare
+ * but read the category breakdown". "thin" says the score rests on a small base — it is a
+ * statement about the evidence, never about the company. A thin-coverage business can be an
+ * excellent one; the score just isn't standing on much.
+ */
+export const COVERAGE_TIER_MIN_RATIO: Record<Exclude<CoverageTier, "thin">, number> = {
+  full: 0.7,
+  partial: 0.4,
+};
+
+function coverageTierFor(ratio: number): CoverageTier {
+  if (ratio >= COVERAGE_TIER_MIN_RATIO.full) return "full";
+  if (ratio >= COVERAGE_TIER_MIN_RATIO.partial) return "partial";
+  return "thin";
+}
+
+/**
+ * Counts only categories the caller actually weights: a category at 0% (momentum, by default)
+ * contributes nothing to the score, so counting its metrics would inflate the apparent basis of
+ * a score they never touched. Inapplicable metrics are already excluded upstream, so a bank's
+ * cashGeneration category — entirely inapplicable — contributes to neither side of the ratio
+ * rather than dragging it down.
+ */
+function computeCoverage(categoryScores: CategoryScore[]): ScoreCoverage {
+  const scoring = categoryScores.filter((c) => c.weight > 0);
+  const metricsIncluded = scoring.reduce((sum, c) => sum + c.metricsIncluded, 0);
+  const metricsApplicable = metricsIncluded + scoring.reduce((sum, c) => sum + c.metricsMissing, 0);
+  const ratio = metricsApplicable > 0 ? metricsIncluded / metricsApplicable : 0;
+  return { metricsIncluded, metricsApplicable, ratio, tier: coverageTierFor(ratio) };
+}
+
 function extractHeadlineMetrics(mostRecentYear: Record<string, number | null> | undefined): HeadlineMetrics {
   return {
     peTtm: mostRecentYear?.pe_ttm ?? null,
@@ -147,6 +181,13 @@ function extractHeadlineMetrics(mostRecentYear: Record<string, number | null> | 
  * using categoryWeights (renormalized over categories that have data for
  * that company).
  *
+ * Metrics that are structurally inapplicable to a company's sector (see
+ * sectorApplicability.ts) are skipped for that company and, just as
+ * importantly, that company is dropped from those metrics' peer groups — so
+ * no one is percentile-ranked against a distribution they were never part
+ * of. Each result carries a `coverage` summary of how much of its applicable
+ * metric set actually fed the score.
+ *
  * Lives in shared/ so the exact same implementation runs both server-side
  * (functions/src/ranking/rankingEngine.ts, the nightly job) and client-side
  * (web/src/lib/clientRankingEngine.ts, the Rankings page's instant
@@ -167,6 +208,10 @@ export function computeCrossSectionalRankings(
     const perYear = new Map<number, MetricYearStats>();
     for (let yearIndex = 0; yearIndex < yearsIncluded; yearIndex++) {
       const entries = universe
+        // A company the metric can't describe is left out of the peer group entirely, not just
+        // out of its own score — otherwise everyone else's percentile is computed against a
+        // distribution that includes values the accounting never supported.
+        .filter((c) => isMetricApplicable(metric.key, c.sector))
         .map((c) => ({ ticker: c.ticker, value: c.byYear[yearIndex]?.[metric.key] ?? null }))
         .filter((e): e is { ticker: string; value: number } => e.value !== null && Number.isFinite(e.value));
       if (entries.length < 2) continue;
@@ -201,13 +246,19 @@ export function computeCrossSectionalRankings(
     metricUnitScores.set(metric.key, perYear);
   }
 
-  const results: RankingResult[] = universe.map(({ ticker, byYear }) => {
+  const results: RankingResult[] = universe.map(({ ticker, sector, byYear }) => {
     const categoryScores: CategoryScore[] = METRIC_CATEGORIES.map((category: MetricCategory) => {
       const metricsInCategory = enabledMetrics.filter((m) => m.category === category);
       const metricScoresForCompany: Array<{ score: number; weight: number }> = [];
       let missingCount = 0;
+      let notApplicableCount = 0;
 
       for (const metric of metricsInCategory) {
+        if (!isMetricApplicable(metric.key, sector)) {
+          notApplicableCount++;
+          continue;
+        }
+
         const metricWeight = config.metricWeights?.[metric.key] ?? defaultMetricWeight(metric);
         if (metricWeight <= 0) {
           missingCount++;
@@ -245,6 +296,7 @@ export function computeCrossSectionalRankings(
         weight: config.categoryWeights[category],
         metricsIncluded: metricScoresForCompany.length,
         metricsMissing: missingCount,
+        metricsNotApplicable: notApplicableCount,
       };
     });
 
@@ -263,6 +315,7 @@ export function computeCrossSectionalRankings(
       categoryScores,
       weightsUsed: config,
       headlineMetrics: extractHeadlineMetrics(byYear[0]),
+      coverage: computeCoverage(categoryScores),
     };
   });
 

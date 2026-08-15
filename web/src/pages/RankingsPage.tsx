@@ -178,9 +178,24 @@ function buildCategoryDataColumn(
 ): ColumnDef<Company> {
   return {
     id: "categoryWeightDataAvailable",
-    header: "Category Data",
+    header: "Score Coverage",
     cell: ({ row }) => {
-      const scores = rankings?.get(row.original.ticker)?.categoryScores ?? [];
+      const ranking = rankings?.get(row.original.ticker);
+      // Prefer the engine's per-company coverage: its denominator excludes
+      // metrics that don't apply to the company's sector, so a bank reads
+      // against the ~43 metrics it can have rather than the universe's 68.
+      // Falls back to the flat count for rankings persisted before coverage.
+      const coverage = ranking?.coverage;
+      if (coverage) {
+        const tone =
+          coverage.tier === "full" ? "text-positive" : coverage.tier === "thin" ? "text-negative" : "text-muted-foreground";
+        return (
+          <span className={tone} title={`${coverage.tier} — ${coverage.metricsIncluded} of ${coverage.metricsApplicable} metrics applicable to this company had data`}>
+            {coverage.metricsIncluded}/{coverage.metricsApplicable}
+          </span>
+        );
+      }
+      const scores = ranking?.categoryScores ?? [];
       const count = scores
         .filter((c) => activeCategories.includes(c.category))
         .reduce((sum, c) => sum + c.metricsIncluded, 0);

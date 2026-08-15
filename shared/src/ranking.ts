@@ -24,6 +24,31 @@ export interface CategoryScore {
   weight: number;
   metricsIncluded: number;
   metricsMissing: number;
+  /**
+   * Metrics skipped because they're structurally inapplicable to this company's sector (see
+   * shared/src/sectorApplicability.ts) — deliberately not folded into metricsMissing, since a
+   * bank isn't "missing" ROIC. Optional because ranking docs persisted before this field
+   * existed are read back as CategoryScore.
+   */
+  metricsNotApplicable?: number;
+}
+
+export type CoverageTier = "full" | "partial" | "thin";
+
+/**
+ * How much of the applicable metric set actually fed a company's score. Without it, a company
+ * scored on 2 metrics and one scored on 60 emit an equally confident 0-100 with nothing marking
+ * the difference. "applicable" already excludes metrics that are meaningless for the company's
+ * sector, so a bank is measured against the metrics that can describe a bank, not against the
+ * whole registry.
+ */
+export interface ScoreCoverage {
+  metricsIncluded: number;
+  /** metricsIncluded + metricsMissing, i.e. metrics that could have applied to this company. */
+  metricsApplicable: number;
+  /** metricsIncluded / metricsApplicable; 0 when nothing was applicable. */
+  ratio: number;
+  tier: CoverageTier;
 }
 
 /** Firestore doc: rankings/latest/companies/{ticker} and historicalRankings/{ticker}/snapshots/{date} */
@@ -36,6 +61,8 @@ export interface RankingResult {
   categoryScores: CategoryScore[];
   weightsUsed: RankingWeightsConfig;
   headlineMetrics: HeadlineMetrics;
+  /** Optional: ranking docs persisted before coverage existed are read back as RankingResult. */
+  coverage?: ScoreCoverage;
 }
 
 export const DEFAULT_RANKING_CONFIG: RankingWeightsConfig = {

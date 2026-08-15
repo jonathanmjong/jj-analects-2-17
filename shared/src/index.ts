@@ -12,5 +12,6 @@ export * from "./momentum.js";
 export * from "./ranking.js";
 export * from "./rankingEngineCore.js";
 export * from "./rankingMath.js";
+export * from "./sectorApplicability.js";
 export * from "./sentiment.js";
 export * from "./user.js";

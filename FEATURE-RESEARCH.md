@@ -255,6 +255,28 @@ those two ship and revisit.
   shown; **per-company data-quality indicator** (which metrics are null/stale — silent nulls
   currently distort composite ranks invisibly).
 
+## 4b. Status (2026-08-14) — all three phases shipped
+
+Phases 1–3 below are DONE and deployed. Phase 3 did not use the price backfill (E1): that
+path costs ~$45–50/mo (see TODO.md for the full VPC diagnosis) and every free daily-bar
+source is now gated. It was served instead by EDGAR's `dei/EntityPublicFloat` — 13,178
+annual observations across **1,308 of 1,323 companies (98.9%)**, 1,194 with ≥5 years, avg
+10.1 years each. Sanity-checked against AAPL's real re-rating (float-P/E 11.7 FY2014 → 29.0
+FY2025). Remaining Phase 3 gap: the buyback-timing pillar (F8 3b) still wants true price
+history, and today's marker on the own-history band only appears once a float observation
+and a market-cap observation fall within 10 days of each other (self-heals with FY2026
+filings; see the panel rule about not placing a value on a basis it doesn't share).
+
+**Next up — the gap both fundamental judges rated above any single feature.** Verified in
+production: Financials (191) and Real Estate (88) are 266 ranked companies, 30 of the top
+100, and for them most metrics do not compute at all — JPM scores on `pe_ttm` and `pb`
+alone (rank 857), WFC on nothing (rank null), while SPG reaches rank 92 partly on `ev_ebit`,
+which is not a meaningful measure for a REIT's capital structure. The engine renormalizes
+over surviving categories, so a 2-metric score and a 60-metric score both present as a
+confident 0–100. Fix in progress: a sector-applicability layer (inapplicable ≠ missing, and
+inapplicable metrics leave the peer group entirely) plus a per-company coverage tier
+surfaced in the UI.
+
 ## 5. Recommended sequencing
 
 **Phase 1 — no new data, low effort, unanimous verdicts:**
