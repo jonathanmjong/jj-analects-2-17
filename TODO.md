@@ -4,6 +4,30 @@ Running list of known open items. Not a full backlog — just things worth not f
 
 ## Open
 
+- **Residual XBRL data gaps after the 2026-08-15 net-income fix.** Net income nulls went
+  134/1344 (10%) → 40 (3%) by resolving `NetIncomeLoss` →
+  `NetIncomeLossAvailableToCommonStockholdersBasic` → `ProfitLoss` per fiscal period. What is
+  left, in order of size:
+  - **WELL and AMT report nothing under any of the three tags** (CIKs 0000766704 /
+    0001053507) — probably a CIK/registrant change where the operating partnership co-files.
+    Not fixable by tag precedence; needs a look at the actual submissions.
+  - **`operatingIncome` has the same shape of gap and was deliberately NOT fixed.** O, VTR,
+    WELL, AMT, SRE report no `OperatingIncomeLoss` at any date; BXP stops at FY2017, PSA at
+    FY2017. Unlike net income there is no alternative tag on the same basis — the nearest is
+    pretax income, already net of interest expense, which for a leveraged REIT/utility would
+    corrupt `ebit` (set equal to operatingIncome) and make interest coverage circular. The
+    honest route is deriving `Revenues − CostsAndExpenses` and marking it derived; that's a
+    metrics-layer decision, not an ingestion one.
+  - **D&A coverage is 78% universe-wide** (Real Estate 88%, Financials 58%). The FFO metrics
+    only need the REIT figure, and banks genuinely report little D&A, so this is mostly
+    fine — but a filer using a tag outside
+    `DepreciationDepletionAndAmortization`/`DepreciationAndAmortization` silently yields no FFO.
+  - **Recommended but not done:** store a `netIncomeSourceTag` on `IncomeStatement` so the UI
+    can flag NCI-inclusive figures and an audit can find them without re-fetching EDGAR.
+- **`npm run lint` is broken for the functions workspace** — `eslint` is not in
+  `functions/node_modules/.bin` in a fresh checkout, so the script exits 127. CI has no lint
+  step, so nothing catches it. Either add eslint as a devDependency or drop the script.
+
 - **Daily price history: abandoned as a paid/infra problem, routed around for free (2026-08-14).**
   Retried the VPC connector: the 2026-08-05 `ZONE_RESOURCE_POOL_EXHAUSTED` capacity problem is
   GONE, but both attempts failed with "connector failed to get healthy" — root cause found:
