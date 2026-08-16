@@ -244,9 +244,21 @@ export const FIXTURE_CONFIGS: Array<{ name: string; config: RankingWeightsConfig
 ];
 
 /** Exact round-trippable rendering — Number#toString is lossless for doubles, so this is a bit-for-bit comparison. */
+/**
+ * Rounded to 14 significant digits rather than `String(v)`. The z-score
+ * normalization path runs values through `Math.exp` (logistic squashing), and
+ * ECMAScript explicitly permits transcendental functions to differ in the last
+ * ULP between engines and CPU architectures — this baseline is generated on one
+ * machine and asserted on another in CI, where a handful of companies differed
+ * in the final digit. 14 significant digits is far tighter than any real
+ * algorithmic change could hide in (those move values by whole percent) while
+ * being immune to last-ULP drift. The percentile path, which production uses by
+ * default, involves no transcendentals and is unaffected either way.
+ */
 function num(v: number | null | undefined): string {
   if (v === null || v === undefined) return "~";
-  return String(v);
+  if (!Number.isFinite(v)) return String(v);
+  return v.toPrecision(14);
 }
 
 /** Canonical, exact serialization of one result. Excludes computedAt (wall clock) and weightsUsed (the caller's own object). */
