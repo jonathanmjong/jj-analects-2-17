@@ -3,14 +3,45 @@
  * in shared/ specifically so the exact same implementation runs both
  * server-side (the nightly ranking engine) and client-side (the instant
  * live-reweighting preview on the Rankings page), which must agree.
+ *
+ * Each routine exists twice: an `Array`-shaped version (the readable public
+ * API, used by callers outside the engine) and an in-place `Float64Array`
+ * twin the engine's hot loop calls ~370 times per recompute without
+ * allocating. The array versions are thin wrappers over the in-place ones so
+ * there is exactly one implementation of each algorithm — the two can never
+ * drift apart and start scoring the same company differently on the server
+ * than in the browser.
  */
 
+/**
+ * Clamps the first `n` entries of `values` to the winsorization bounds, in place.
+ * `sortScratch` is caller-owned working space and must hold at least `n` entries;
+ * its contents are not meaningful on return.
+ */
+export function winsorizeInPlace(
+  values: Float64Array,
+  n: number,
+  lowerPct: number,
+  upperPct: number,
+  sortScratch: Float64Array,
+): void {
+  if (n < 2) return;
+  for (let i = 0; i < n; i++) sortScratch[i] = values[i];
+  const sorted = sortScratch.subarray(0, n);
+  sorted.sort();
+  const lowerBound = sorted[Math.floor(lowerPct * (n - 1))];
+  const upperBound = sorted[Math.ceil(upperPct * (n - 1))];
+  for (let i = 0; i < n; i++) {
+    values[i] = Math.min(Math.max(values[i], lowerBound), upperBound);
+  }
+}
+
 export function winsorize(values: number[], lowerPct: number, upperPct: number): number[] {
-  if (values.length < 2) return values;
-  const sorted = [...values].sort((a, b) => a - b);
-  const lowerBound = sorted[Math.floor(lowerPct * (sorted.length - 1))];
-  const upperBound = sorted[Math.ceil(upperPct * (sorted.length - 1))];
-  return values.map((v) => Math.min(Math.max(v, lowerBound), upperBound));
+  const n = values.length;
+  if (n < 2) return values;
+  const buf = Float64Array.from(values);
+  winsorizeInPlace(buf, n, lowerPct, upperPct, new Float64Array(n));
+  return Array.from(buf);
 }
 
 /**
@@ -30,27 +61,64 @@ export function compareNegativeIsBad(a: number | null | undefined, b: number | n
   return aBad ? b - a : a - b;
 }
 
+/**
+ * Writes each of the first `n` values' percentile rank (0-1) into `out`, order-preserved with
+ * the input. `orderScratch` is caller-owned working space; it is resized to `n` and overwritten.
+ *
+ * Ties matter here and are resolved by original position: winsorization deliberately collapses
+ * the tails onto a shared bound, so a large block of exactly-equal values is the normal case, not
+ * an edge case. The sort must therefore stay a stable `Array.prototype.sort` over an
+ * ascending-index array — `%TypedArray%.prototype.sort` is not a safe substitute.
+ *
+ * On return `orderScratch[0..n)` holds that ascending permutation, which the engine reuses to
+ * derive peer ranks without a second sort (see scoreGroup).
+ */
+export function percentileRanksInPlace(values: Float64Array, n: number, out: Float64Array, orderScratch: number[]): void {
+  if (n === 0) return;
+  if (n === 1) {
+    out[0] = 1;
+    orderScratch.length = 1;
+    orderScratch[0] = 0;
+    return;
+  }
+  orderScratch.length = n;
+  for (let i = 0; i < n; i++) orderScratch[i] = i;
+  orderScratch.sort((a, b) => values[a] - values[b]);
+  const denominator = n - 1;
+  for (let rank = 0; rank < n; rank++) out[orderScratch[rank]] = rank / denominator;
+}
+
 /** Percentile rank (0-1) of each value within the peer set, order-preserved with input. */
 export function percentileRanks(values: number[]): number[] {
   const n = values.length;
   if (n === 0) return [];
-  if (n === 1) return [1];
-  const order = values.map((_, idx) => idx).sort((a, b) => values[a] - values[b]);
-  const out = new Array<number>(n);
-  order.forEach((originalIndex, rank) => {
-    out[originalIndex] = rank / (n - 1);
-  });
-  return out;
+  const out = new Float64Array(n);
+  percentileRanksInPlace(Float64Array.from(values), n, out, []);
+  return Array.from(out);
+}
+
+/** Writes the z-score of each of the first `n` values into `out`. */
+export function zscoresInPlace(values: Float64Array, n: number, out: Float64Array): void {
+  if (n === 0) return;
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += values[i];
+  const mean = sum / n;
+  let squares = 0;
+  for (let i = 0; i < n; i++) squares += (values[i] - mean) ** 2;
+  const sd = Math.sqrt(squares / n);
+  if (sd === 0) {
+    for (let i = 0; i < n; i++) out[i] = 0;
+    return;
+  }
+  for (let i = 0; i < n; i++) out[i] = (values[i] - mean) / sd;
 }
 
 export function zscores(values: number[]): number[] {
   const n = values.length;
   if (n === 0) return [];
-  const mean = values.reduce((a, b) => a + b, 0) / n;
-  const variance = values.reduce((acc, v) => acc + (v - mean) ** 2, 0) / n;
-  const sd = Math.sqrt(variance);
-  if (sd === 0) return values.map(() => 0);
-  return values.map((v) => (v - mean) / sd);
+  const out = new Float64Array(n);
+  zscoresInPlace(Float64Array.from(values), n, out);
+  return Array.from(out);
 }
 
 /** Maps a z-score onto a roughly 0-1 band for combining with percentile-based scores in the same units. */
@@ -70,4 +138,19 @@ export function weightedAverage(entries: Array<{ score: number; weight: number }
   const weightSum = entries.reduce((acc, e) => acc + e.weight, 0);
   if (weightSum <= 0) return null;
   return entries.reduce((acc, e) => acc + (e.weight / weightSum) * e.score, 0);
+}
+
+/**
+ * Allocation-free twin of weightedAverage over parallel arrays. Identical arithmetic in identical
+ * order (accumulate the weights, then accumulate `(weight / weightSum) * score` left to right), so
+ * it is bit-for-bit equal to weightedAverage on the same inputs — the aggregation loop runs this
+ * ~500k times per recompute and cannot afford to build an object per metric-year.
+ */
+export function weightedAverageFrom(scores: ArrayLike<number>, weights: ArrayLike<number>, count: number): number | null {
+  let weightSum = 0;
+  for (let i = 0; i < count; i++) weightSum += weights[i];
+  if (weightSum <= 0) return null;
+  let acc = 0;
+  for (let i = 0; i < count; i++) acc += (weights[i] / weightSum) * scores[i];
+  return acc;
 }

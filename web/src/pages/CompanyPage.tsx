@@ -25,6 +25,7 @@ import { StatementsExplorer } from "../components/company/StatementsExplorer";
 import { StrategyScorecard } from "../components/company/StrategyScorecard";
 import { ValuationHistoryPanel } from "../components/company/ValuationHistoryPanel";
 import { MetricInfoLabel } from "../components/metrics/MetricInfoLabel";
+import { DeferUntilVisible } from "../components/layout/DeferUntilVisible";
 import { cn, formatCurrency, formatNumber, formatPercent } from "../lib/utils";
 
 function labelBadgeVariant(label: SentimentLabel): "positive" | "negative" | "neutral" {
@@ -295,162 +296,172 @@ export function CompanyPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Revenue History</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <HistoryLineChart data={revenueHistory} label="Revenue" formatValue={(v) => formatCurrency(v, { compact: true })} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Free Cash Flow History</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <HistoryLineChart data={fcfHistory} label="FCF" formatValue={(v) => formatCurrency(v, { compact: true })} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Gross Margin History</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <HistoryLineChart data={marginHistory} label="Gross Margin" formatValue={(v) => formatPercent(v)} />
-          </CardContent>
-        </Card>
-      </div>
+      <DeferUntilVisible minHeight={280}>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <CardTitle>Revenue History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <HistoryLineChart data={revenueHistory} label="Revenue" formatValue={(v) => formatCurrency(v, { compact: true })} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Free Cash Flow History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <HistoryLineChart data={fcfHistory} label="FCF" formatValue={(v) => formatCurrency(v, { compact: true })} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Gross Margin History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <HistoryLineChart data={marginHistory} label="Gross Margin" formatValue={(v) => formatPercent(v)} />
+            </CardContent>
+          </Card>
+        </div>
+      </DeferUntilVisible>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Revenue → Net Income Bridge (most recent fiscal year)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <IncomeWaterfall
-            data={{
-              revenue: data.income[0]?.revenue ?? null,
-              grossProfit: data.income[0]?.grossProfit ?? null,
-              operatingIncome: data.income[0]?.operatingIncome ?? null,
-              pretaxIncome: data.income[0]?.pretaxIncome ?? null,
-              netIncome: data.income[0]?.netIncome ?? null,
-            }}
+      <DeferUntilVisible minHeight={360}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Revenue → Net Income Bridge (most recent fiscal year)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <IncomeWaterfall
+              data={{
+                revenue: data.income[0]?.revenue ?? null,
+                grossProfit: data.income[0]?.grossProfit ?? null,
+                operatingIncome: data.income[0]?.operatingIncome ?? null,
+                pretaxIncome: data.income[0]?.pretaxIncome ?? null,
+                netIncome: data.income[0]?.netIncome ?? null,
+              }}
+            />
+          </CardContent>
+        </Card>
+      </DeferUntilVisible>
+
+      <DeferUntilVisible minHeight={1200}>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ValuationHistoryPanel
+            ticker={data.company.ticker}
+            sector={data.company.sector ?? null}
+            todayMarketCap={data.company.latest?.marketCap ?? null}
+            income={data.income}
+            balance={data.balance}
+            priceSource={data.company.latest?.priceSource}
           />
-        </CardContent>
-      </Card>
+          <CapitalAllocationPanel
+            income={data.income}
+            balance={data.balance}
+            cashFlow={data.cashFlow}
+            sector={data.company.sector ?? null}
+          />
+          <StrategyScorecard metricValues={latestMetricValues} />
+          <GrowthRoicChart income={data.income} balance={data.balance} />
+          <ScenarioTool
+            income={data.income}
+            cashFlow={data.cashFlow}
+            sharePrice={data.company.latest?.sharePrice ?? null}
+            sharesOutstanding={data.company.latest?.sharesOutstanding ?? null}
+          />
+          <ReverseDcfPanel
+            income={data.income}
+            balance={data.balance}
+            cashFlow={data.cashFlow}
+            sector={data.company.sector ?? null}
+            sharePrice={data.company.latest?.sharePrice ?? null}
+            sharesOutstanding={data.company.latest?.sharesOutstanding ?? null}
+          />
+          <ForensicPanel
+            income={data.income}
+            balance={data.balance}
+            cashFlow={data.cashFlow}
+            marketCap={data.company.latest?.marketCap ?? null}
+            sector={data.company.sector ?? null}
+          />
+        </div>
+      </DeferUntilVisible>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ValuationHistoryPanel
-          ticker={data.company.ticker}
-          sector={data.company.sector ?? null}
-          todayMarketCap={data.company.latest?.marketCap ?? null}
-          income={data.income}
-          balance={data.balance}
-          priceSource={data.company.latest?.priceSource}
-        />
-        <CapitalAllocationPanel
-          income={data.income}
-          balance={data.balance}
-          cashFlow={data.cashFlow}
-          sector={data.company.sector ?? null}
-        />
-        <StrategyScorecard metricValues={latestMetricValues} />
-        <GrowthRoicChart income={data.income} balance={data.balance} />
-        <ScenarioTool
-          income={data.income}
-          cashFlow={data.cashFlow}
-          sharePrice={data.company.latest?.sharePrice ?? null}
-          sharesOutstanding={data.company.latest?.sharesOutstanding ?? null}
-        />
-        <ReverseDcfPanel
-          income={data.income}
-          balance={data.balance}
-          cashFlow={data.cashFlow}
-          sector={data.company.sector ?? null}
-          sharePrice={data.company.latest?.sharePrice ?? null}
-          sharesOutstanding={data.company.latest?.sharesOutstanding ?? null}
-        />
-        <ForensicPanel
-          income={data.income}
-          balance={data.balance}
-          cashFlow={data.cashFlow}
-          marketCap={data.company.latest?.marketCap ?? null}
-          sector={data.company.sector ?? null}
-        />
-      </div>
+      <DeferUntilVisible minHeight={600}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Financial Statements</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <StatementsExplorer income={data.income} balance={data.balance} cashFlow={data.cashFlow} />
+          </CardContent>
+        </Card>
+      </DeferUntilVisible>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Financial Statements</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <StatementsExplorer income={data.income} balance={data.balance} cashFlow={data.cashFlow} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Metric Breakdown — up to 5 fiscal years</CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <p className="mb-4 text-xs text-muted-foreground">
-            Year weights (most recent first): {DEFAULT_YEAR_WEIGHTS.map((w) => `${w * 100}%`).join(" / ")}. A missing
-            year is excluded from a metric's score and the remaining years' weights are renormalized — it is never
-            treated as zero. "P82 · #12/1319" means this company's value for that metric/year outperforms 82% of
-            peers with data, ranking 12th of 1,319.
-          </p>
-          {METRIC_CATEGORIES.map((category) => (
-            <div key={category} className="mb-6">
-              <h3 className="mb-2 text-sm font-semibold">{CATEGORY_LABELS[category]}</h3>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Metric</th>
-                    {yearColumns.map((period, idx) => (
-                      <th key={period.periodKey} className="py-2 pr-4 text-right font-medium">
-                        {period.periodKey}
-                        <div className="text-[10px] normal-case text-muted-foreground/70">
-                          {((DEFAULT_YEAR_WEIGHTS[idx] ?? 0) * 100).toFixed(0)}% weight
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {metricsByCategory[category]?.map((metric) => (
-                    <tr key={metric.key} className="border-t border-border">
-                      <td className="py-2 pr-4 text-muted-foreground">
-                        <MetricInfoLabel metric={metric} />
-                      </td>
-                      {yearColumns.map((period) => {
-                        const score = period.scores?.[metric.key];
-                        const missing = !score || score.isMissing;
-                        return (
-                          <td key={period.periodKey} className="py-2 pr-4 text-right">
-                            {missing ? (
-                              <span className="text-xs text-muted-foreground">Data missing</span>
-                            ) : (
-                              <>
-                                <div>{metric.unit === "percent" ? formatPercent(score.rawValue) : formatNumber(score.rawValue, 2)}</div>
-                                {score.percentile !== null && (
-                                  <div className="text-[10px] text-muted-foreground">
-                                    P{Math.round(score.percentile * 100)}
-                                    {score.rankAmongPeers !== null && ` · #${score.rankAmongPeers}/${score.peerCount}`}
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </td>
-                        );
-                      })}
+      <DeferUntilVisible minHeight={2400}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Metric Breakdown — up to 5 fiscal years</CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <p className="mb-4 text-xs text-muted-foreground">
+              Year weights (most recent first): {DEFAULT_YEAR_WEIGHTS.map((w) => `${w * 100}%`).join(" / ")}. A missing
+              year is excluded from a metric's score and the remaining years' weights are renormalized — it is never
+              treated as zero. "P82 · #12/1319" means this company's value for that metric/year outperforms 82% of
+              peers with data, ranking 12th of 1,319.
+            </p>
+            {METRIC_CATEGORIES.map((category) => (
+              <div key={category} className="mb-6">
+                <h3 className="mb-2 text-sm font-semibold">{CATEGORY_LABELS[category]}</h3>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase text-muted-foreground">
+                      <th className="py-2 pr-4 font-medium">Metric</th>
+                      {yearColumns.map((period, idx) => (
+                        <th key={period.periodKey} className="py-2 pr-4 text-right font-medium">
+                          {period.periodKey}
+                          <div className="text-[10px] normal-case text-muted-foreground/70">
+                            {((DEFAULT_YEAR_WEIGHTS[idx] ?? 0) * 100).toFixed(0)}% weight
+                          </div>
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+                  </thead>
+                  <tbody>
+                    {metricsByCategory[category]?.map((metric) => (
+                      <tr key={metric.key} className="border-t border-border">
+                        <td className="py-2 pr-4 text-muted-foreground">
+                          <MetricInfoLabel metric={metric} />
+                        </td>
+                        {yearColumns.map((period) => {
+                          const score = period.scores?.[metric.key];
+                          const missing = !score || score.isMissing;
+                          return (
+                            <td key={period.periodKey} className="py-2 pr-4 text-right">
+                              {missing ? (
+                                <span className="text-xs text-muted-foreground">Data missing</span>
+                              ) : (
+                                <>
+                                  <div>{metric.unit === "percent" ? formatPercent(score.rawValue) : formatNumber(score.rawValue, 2)}</div>
+                                  {score.percentile !== null && (
+                                    <div className="text-[10px] text-muted-foreground">
+                                      P{Math.round(score.percentile * 100)}
+                                      {score.rankAmongPeers !== null && ` · #${score.rankAmongPeers}/${score.peerCount}`}
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </DeferUntilVisible>
     </div>
   );
 }

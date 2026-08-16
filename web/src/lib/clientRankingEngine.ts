@@ -1,16 +1,17 @@
-import { getBytes, ref } from "firebase/storage";
 import type { MetricDefinition, RankingResult, RankingWeightsConfig, UniverseCompanyData } from "@proverbs/shared";
 import { computeCrossSectionalRankings } from "@proverbs/shared";
-import { storage } from "./firebase";
+import { loadStorage } from "./firebase";
 import { CACHE_VERSION, idbGet, idbSet, isUniverseCacheFresh } from "./idbCache";
+import {
+  latestYearMetricsByTicker,
+  reshapeUniverse,
+  type RankingUniverseExport,
+} from "./rankingUniverseShape";
+import { prewarmRankingWorker, terminateRankingWorker } from "./rankingWorkerClient";
 
 const EXPORT_PATH = "public/ranking-universe.json.gz";
 
-interface RankingUniverseExport {
-  computedAt: string;
-  metricKeys: string[];
-  companies: Array<{ ticker: string; sector: string | null; byYear: Array<Array<number | null>> }>;
-}
+export type { RankingUniverseExport };
 
 /**
  * Storage serves the object with Content-Encoding: gzip (see
@@ -32,7 +33,18 @@ async function decodeExportBytes(bytes: ArrayBuffer): Promise<RankingUniverseExp
   return JSON.parse(text) as RankingUniverseExport;
 }
 
-let inFlight: Promise<{ computedAt: string; universe: UniverseCompanyData[] }> | null = null;
+let inFlight: Promise<{ computedAt: string; exportData: RankingUniverseExport }> | null = null;
+
+/**
+ * The expanded, engine-ready universe: ~500k object properties, and the single
+ * largest allocation the client makes. Derived lazily and only by callers that
+ * genuinely need it on this thread (the synchronous fallback path) — when the
+ * ranking worker is available the expansion happens there instead, and this
+ * stays null for the whole session.
+ */
+let expandedUniverse: { forExport: RankingUniverseExport; universe: UniverseCompanyData[] } | null = null;
+let latestYearMetrics: { forExport: RankingUniverseExport; byTicker: Map<string, Record<string, number | null>> } | null =
+  null;
 
 const UNIVERSE_CACHE_KEY = `ranking-universe-${CACHE_VERSION}`;
 
@@ -53,6 +65,7 @@ async function fetchExportData(): Promise<RankingUniverseExport> {
     return cached.export;
   }
   try {
+    const [{ getBytes, ref }, storage] = await Promise.all([import("firebase/storage"), loadStorage()]);
     const bytes = await getBytes(ref(storage, EXPORT_PATH));
     const exportData = await decodeExportBytes(bytes);
     void idbSet(UNIVERSE_CACHE_KEY, { cachedAt: Date.now(), export: exportData } satisfies CachedUniverseExport);
@@ -69,29 +82,14 @@ async function fetchExportData(): Promise<RankingUniverseExport> {
 /**
  * Fetches (once per page session, subject to Storage security rules —
  * subscribed users only, see storage.rules) and parses the bulk raw-metric
- * export, converting it into the Record-keyed shape
- * computeCrossSectionalRankings expects. Cached in module scope so every
- * slider tweak after the first reuses the same in-memory universe instead of
- * re-fetching.
+ * export in its compact wire shape. Cached in module scope so every slider
+ * tweak after the first reuses the same in-memory copy instead of re-fetching.
  */
-export function loadRankingUniverse(): Promise<{ computedAt: string; universe: UniverseCompanyData[] }> {
+export function loadRankingUniverseExport(): Promise<{ computedAt: string; exportData: RankingUniverseExport }> {
   if (!inFlight) {
     inFlight = (async () => {
       const exportData = await fetchExportData();
-
-      const universe: UniverseCompanyData[] = exportData.companies.map((c) => ({
-        ticker: c.ticker,
-        sector: c.sector,
-        byYear: c.byYear.map((yearValues) => {
-          const record: Record<string, number | null> = {};
-          exportData.metricKeys.forEach((key, idx) => {
-            record[key] = yearValues[idx] ?? null;
-          });
-          return record;
-        }),
-      }));
-
-      return { computedAt: exportData.computedAt, universe };
+      return { computedAt: exportData.computedAt, exportData };
     })().catch((err) => {
       inFlight = null; // let a later call retry instead of caching a permanent failure
       throw err;
@@ -100,16 +98,56 @@ export function loadRankingUniverse(): Promise<{ computedAt: string; universe: U
   return inFlight;
 }
 
+/** The compact export expanded into the Record-keyed shape computeCrossSectionalRankings expects. */
+export async function loadRankingUniverse(): Promise<{ computedAt: string; universe: UniverseCompanyData[] }> {
+  const { computedAt, exportData } = await loadRankingUniverseExport();
+  if (expandedUniverse?.forExport !== exportData) {
+    expandedUniverse = { forExport: exportData, universe: reshapeUniverse(exportData) };
+  }
+  return { computedAt, universe: expandedUniverse.universe };
+}
+
+/**
+ * Most recent year's raw metric values per ticker — what the formula filter and
+ * preset screens read. A fifth of the expansion work of loadRankingUniverse,
+ * which is the only reason the Rankings page ever built the full five years.
+ */
+export async function loadLatestYearMetrics(): Promise<{
+  keys: string[];
+  byTicker: Map<string, Record<string, number | null>>;
+}> {
+  const { exportData } = await loadRankingUniverseExport();
+  if (latestYearMetrics?.forExport !== exportData) {
+    latestYearMetrics = { forExport: exportData, byTicker: latestYearMetricsByTicker(exportData) };
+  }
+  return { keys: exportData.metricKeys, byTicker: latestYearMetrics.byTicker };
+}
+
+/**
+ * Gives the ranking worker its universe while the page is still loading, so the
+ * first weight-slider change pays for the computation only. Only worth calling
+ * from a page that already loads the export at mount — it must never be the
+ * thing that triggers the ~2MB Storage fetch.
+ */
+export async function prewarmRankingEngine(): Promise<void> {
+  const { exportData } = await loadRankingUniverseExport();
+  await prewarmRankingWorker(exportData);
+}
+
 /**
  * Drops the cached universe fetch. Must be called on sign-out (and on
  * switching to a different account in the same tab) — otherwise the next
  * signed-in user on this tab would silently reuse the previous user's
  * already-fetched (Storage-rules-gated) financial data instead of the
  * fetch being re-authorized under their own token. See
- * web/src/context/AuthProvider.tsx.
+ * web/src/context/AuthProvider.tsx. The worker holds its own copy of the same
+ * data, so it has to go too.
  */
 export function clearRankingUniverseCache(): void {
   inFlight = null;
+  expandedUniverse = null;
+  latestYearMetrics = null;
+  terminateRankingWorker();
 }
 
 /** Instant, in-browser twin of functions/src/ranking/rankingEngine.ts's computeRankings — same shared math, no network round-trip. */

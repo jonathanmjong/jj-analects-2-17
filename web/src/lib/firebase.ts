@@ -2,7 +2,6 @@ import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
-import { getStorage } from "firebase/storage";
 
 // Firebase web config is not a secret — it identifies the project to
 // Google's servers, and access is actually governed by Firestore Security
@@ -21,5 +20,15 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const functions = getFunctions(app);
-export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
+
+/**
+ * Storage is loaded on demand rather than exported like the others: its only
+ * user is the ranking-universe download, so a static export put the Storage SDK
+ * in the entry bundle for every visitor including anonymous ones on the landing
+ * page. The SDK caches instances per app, so repeated calls are free.
+ */
+export async function loadStorage() {
+  const { getStorage } = await import("firebase/storage");
+  return getStorage(app);
+}

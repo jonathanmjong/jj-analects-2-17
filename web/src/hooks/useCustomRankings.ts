@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MetricCategory, RankingResult, RankingWeightsConfig } from "@proverbs/shared";
 import { DEFAULT_RANKING_CONFIG } from "@proverbs/shared";
-import { computeClientRankings, loadRankingUniverse } from "../lib/clientRankingEngine";
+import { computeClientRankings, loadRankingUniverse, loadRankingUniverseExport } from "../lib/clientRankingEngine";
+import { computeRankingsViaWorker } from "../lib/rankingWorkerClient";
 import { useMetricDefinitions } from "./useMetricDefinitions";
 import { usePageState } from "./usePageState";
 
@@ -12,6 +13,11 @@ import { usePageState } from "./usePageState";
  * to a callable — the export is fetched once per page session and cached in
  * module scope, so every slider tweak after the first is pure local
  * computation (milliseconds, not the ~25s the old server round-trip took).
+ *
+ * The computation itself runs in a Web Worker (rankingEngine.worker.ts) so a
+ * slider drag doesn't block paint; if no worker can be created it runs the
+ * identical function on this thread instead. Either way the results are the
+ * same — the worker is a scheduling detail, not a behavior change.
  *
  * `persistKey`, when given, keeps `config` alive across the caller
  * unmounting and remounting (e.g. navigating away from Rankings and back)
@@ -24,21 +30,33 @@ export function useCustomRankings(persistKey?: string) {
   const [results, setResults] = useState<RankingResult[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Latest-wins: a burst of slider events must not let an older run's results or its "done" land last. */
+  const runIdRef = useRef(0);
 
   const recompute = useCallback(
     async (nextConfig: RankingWeightsConfig) => {
       // Metric definitions back the weight sliders themselves, so by the time a user can
       // trigger a recompute they're already loaded via react-query's cache.
       if (!metricDefinitions) return;
+      const runId = ++runIdRef.current;
+      const isCurrent = () => runIdRef.current === runId;
       setLoading(true);
       setError(null);
       try {
+        const { exportData } = await loadRankingUniverseExport();
+        const outcome = await computeRankingsViaWorker(exportData, metricDefinitions, nextConfig);
+        if (outcome.status === "superseded") return;
+        if (outcome.status === "ok") {
+          if (isCurrent()) setResults(outcome.results);
+          return;
+        }
         const { universe } = await loadRankingUniverse();
-        setResults(computeClientRankings(universe, metricDefinitions, nextConfig));
+        const computed = computeClientRankings(universe, metricDefinitions, nextConfig);
+        if (isCurrent()) setResults(computed);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to recompute rankings.");
+        if (isCurrent()) setError(e instanceof Error ? e.message : "Failed to recompute rankings.");
       } finally {
-        setLoading(false);
+        if (isCurrent()) setLoading(false);
       }
     },
     [metricDefinitions],

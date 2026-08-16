@@ -25,8 +25,17 @@ interface ScreenState {
 export function PresetScreens({ contexts, fields, activeFormula, onApply }: PresetScreensProps) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  /**
+   * Match counts are ~1,300 formula evaluations per screen and live inside a closed <details>,
+   * whose contents are in the DOM but invisible. Recounting them on every live re-rank (the
+   * contexts are rebuilt each time) spent that on nothing a user could see — so don't count
+   * until the panel has actually been opened. Opening sets this in the same commit the panel
+   * expands in, so the counts are there the first time they're visible.
+   */
+  const [everOpened, setEverOpened] = useState(false);
 
   const screens = useMemo<ScreenState[]>(() => {
+    if (!everOpened) return STRATEGIES.map((definition) => ({ definition, matches: null, error: null }));
     return STRATEGIES.map((definition) => {
       try {
         const node = parseFormula(definition.screenFormula, fields);
@@ -39,7 +48,7 @@ export function PresetScreens({ contexts, fields, activeFormula, onApply }: Pres
         };
       }
     });
-  }, [contexts, fields]);
+  }, [contexts, fields, everOpened]);
 
   const normalizedActive = activeFormula.trim();
 
@@ -49,7 +58,13 @@ export function PresetScreens({ contexts, fields, activeFormula, onApply }: Pres
   }
 
   return (
-    <details ref={detailsRef} className="group relative">
+    <details
+      ref={detailsRef}
+      className="group relative"
+      onToggle={(e) => {
+        if ((e.currentTarget as HTMLDetailsElement).open) setEverOpened(true);
+      }}
+    >
       <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-sm">
         <ListFilter className="h-3.5 w-3.5" />
         Preset screens

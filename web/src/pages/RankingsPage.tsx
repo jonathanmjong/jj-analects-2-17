@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   flexRender,
@@ -31,7 +31,7 @@ import { PresetScreens } from "../components/rankings/PresetScreens";
 import { MetricInfoLabel } from "../components/metrics/MetricInfoLabel";
 import { formatCurrency, formatMultiple, formatPercent } from "../lib/utils";
 import { exportRowsAsCsv, exportRowsAsJson, exportRowsAsXlsx } from "../lib/exporters";
-import { loadRankingUniverse } from "../lib/clientRankingEngine";
+import { loadLatestYearMetrics, prewarmRankingEngine } from "../lib/clientRankingEngine";
 import {
   buildFormulaContext,
   evaluateFormula,
@@ -204,6 +204,36 @@ function buildCategoryDataColumn(
   };
 }
 
+/**
+ * Returns the previous value whenever the new one is equal by `isEqual`, so a recomputed-but-
+ * unchanged array doesn't invalidate downstream memos or defeat React.memo on a chart. Every
+ * live re-rank rebuilds the filtered rows from scratch; most of what's derived from them
+ * (the scatter's ROIC/growth/market-cap points) is untouched by a weight change.
+ */
+function useStableValue<T>(value: T, isEqual: (a: T, b: T) => boolean): T {
+  const ref = useRef(value);
+  if (ref.current !== value && !isEqual(ref.current, value)) ref.current = value;
+  return ref.current;
+}
+
+function sameScatterData(a: ScatterDatum[], b: ScatterDatum[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.ticker !== y.ticker ||
+      x.roic !== y.roic ||
+      x.revenueGrowth1y !== y.revenueGrowth1y ||
+      x.marketCap !== y.marketCap ||
+      x.sector !== y.sector
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function RankingsPage() {
   const navigate = useNavigate();
   const { data: companies, isLoading } = useCompaniesList({ limitTo: 5000 });
@@ -287,13 +317,17 @@ export function RankingsPage() {
     }
   }, [activeCategoryMetricCount, hasSetDefaultMin, setHasSetDefaultMin, setMinCategoryWeightMetrics]);
 
+  const activeCategorySet = useMemo(() => new Set(activeCategories), [activeCategories]);
+
   function categoryWeightDataAvailable(ticker: string): number {
     // Prefer the live reranked result when one exists — zeroing out a metric's weight in the
     // Valuation weights panel excludes it (counted as missing), which a stale nightly snapshot won't reflect.
     const scores = customOverrideByTicker?.get(ticker)?.categoryScores ?? rankings?.get(ticker)?.categoryScores ?? [];
-    return scores
-      .filter((c) => activeCategories.includes(c.category))
-      .reduce((sum, c) => sum + c.metricsIncluded, 0);
+    let count = 0;
+    for (const c of scores) {
+      if (activeCategorySet.has(c.category)) count += c.metricsIncluded;
+    }
+    return count;
   }
 
   const activeValueFilterCount = Object.values(valueFilters).filter((v) => v !== "").length;
@@ -375,11 +409,13 @@ export function RankingsPage() {
   } | null>(null);
   useEffect(() => {
     let cancelled = false;
-    void loadRankingUniverse()
-      .then(({ universe }) => {
+    void loadLatestYearMetrics()
+      .then(({ keys, byTicker }) => {
         if (cancelled) return;
-        const byTicker = new Map(universe.map((c) => [c.ticker, c.byYear[0] ?? {}]));
-        setUniverseMetrics({ keys: Object.keys(universe.find((c) => c.byYear[0])?.byYear[0] ?? {}), byTicker });
+        setUniverseMetrics({ keys, byTicker });
+        // The export is already in memory at this point, so this only hands the
+        // worker its copy — it never triggers the Storage fetch itself.
+        void prewarmRankingEngine();
       })
       .catch(() => undefined);
     return () => {
@@ -424,8 +460,13 @@ export function RankingsPage() {
     }
   }, [formulaInput, formulaFields]);
 
-  /** One evaluation context per company, shared by the formula filter and the preset screens' hit counts. */
-  const formulaContexts = useMemo(() => {
+  /**
+   * One evaluation context per company, shared by the formula filter and the preset screens' hit
+   * counts. Built in two layers because only `overallscore` moves when weights are re-ranked:
+   * assembling the ~74 metric fields normalizes every key (a regex per key per company), which is
+   * far too much to redo on every slider change for one field that changed.
+   */
+  const baseFormulaContexts = useMemo(() => {
     const contexts = new Map<string, FormulaContext>();
     for (const c of companies ?? []) {
       const headline = c.latest?.headlineMetrics;
@@ -439,12 +480,31 @@ export function RankingsPage() {
           dividendyield: headline?.dividendYield ?? null,
           fcfyield: headline?.fcfYield ?? null,
           revenuegrowth1y: headline?.revenueGrowth1y ?? null,
-          overallscore: customOverrideByTicker?.get(c.ticker)?.overallScore ?? c.latest?.overallScore ?? null,
+          overallscore: c.latest?.overallScore ?? null,
         }),
       );
     }
     return contexts;
-  }, [companies, universeMetrics, customOverrideByTicker]);
+  }, [companies, universeMetrics]);
+
+  const formulaContexts = useMemo(() => {
+    if (!customOverrideByTicker) return baseFormulaContexts;
+    const contexts = new Map<string, FormulaContext>();
+    for (const [ticker, base] of baseFormulaContexts) {
+      const overallScore = customOverrideByTicker.get(ticker)?.overallScore ?? null;
+      if (overallScore === null) {
+        contexts.set(ticker, base);
+        continue;
+      }
+      // Prototype overlay rather than a copy: one own property instead of re-copying ~80 fields
+      // per company. Contexts are only ever read by field name, so inherited fields behave
+      // identically to own ones.
+      const withOverride: FormulaContext = Object.create(base) as FormulaContext;
+      withOverride.overallscore = overallScore;
+      contexts.set(ticker, withOverride);
+    }
+    return contexts;
+  }, [baseFormulaContexts, customOverrideByTicker]);
 
   const presetScreenContexts = useMemo(() => [...formulaContexts.values()], [formulaContexts]);
 
@@ -503,7 +563,7 @@ export function RankingsPage() {
     [rankings, activeCategories, activeCategoryMetricCount],
   );
 
-  const scatterCandidates = useMemo<ScatterDatum[]>(() => {
+  const scatterCandidatesRaw = useMemo<ScatterDatum[]>(() => {
     return filteredData
       .filter(
         (c): c is typeof c & { latest: { marketCap: number; headlineMetrics: { roic: number; revenueGrowth1y: number } } } =>
@@ -523,6 +583,10 @@ export function RankingsPage() {
         marketCap: c.latest.marketCap,
       }));
   }, [filteredData]);
+
+  const scatterCandidates = useStableValue(scatterCandidatesRaw, sameScatterData);
+
+  const openCompany = useCallback((ticker: string) => navigate(`/company/${ticker}`), [navigate]);
 
   /** 0 = no trimming. Otherwise excludes the most extreme X% of each tail on ROIC or revenue
    * growth so a handful of extreme values don't compress the rest of the plot into a corner.
@@ -646,7 +710,7 @@ export function RankingsPage() {
           <CardContent>
             {scatterData.length > 0 ? (
               <>
-                <QualityGrowthScatter data={scatterData} onSelect={(ticker) => navigate(`/company/${ticker}`)} />
+                <QualityGrowthScatter data={scatterData} onSelect={openCompany} />
                 <p className="mt-2 text-xs text-muted-foreground">
                   Largest {scatterData.length} companies (by market cap) matching the current filters with both
                   metrics available. Colored by sector.

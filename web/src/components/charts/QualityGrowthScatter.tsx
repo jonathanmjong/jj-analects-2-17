@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { CartesianGrid, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { formatCurrency, formatPercent } from "../../lib/utils";
 
@@ -40,7 +41,19 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
   );
 }
 
-export function QualityGrowthScatter({ data, onSelect }: { data: ScatterDatum[]; onSelect?: (ticker: string) => void }) {
+/**
+ * Memoized because the Rankings page re-renders on every keystroke in its search box and every
+ * live re-rank, while this chart's 200 points depend on neither — and re-rendering a Recharts
+ * scatter is tens of milliseconds. Callers must keep `data` and `onSelect` identity-stable for
+ * this to bite (see RankingsPage).
+ */
+export const QualityGrowthScatter = memo(function QualityGrowthScatter({
+  data,
+  onSelect,
+}: {
+  data: ScatterDatum[];
+  onSelect?: (ticker: string) => void;
+}) {
   const bySector = new Map<string, ScatterDatum[]>();
   for (const d of data) {
     (bySector.get(d.sector) ?? bySector.set(d.sector, []).get(d.sector)!).push(d);
@@ -84,4 +97,4 @@ export function QualityGrowthScatter({ data, onSelect }: { data: ScatterDatum[];
       </ResponsiveContainer>
     </div>
   );
-}
+});
