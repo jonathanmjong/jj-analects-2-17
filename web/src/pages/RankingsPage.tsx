@@ -13,7 +13,7 @@ import {
 } from "@tanstack/react-table";
 import { Download, HelpCircle, SlidersHorizontal } from "lucide-react";
 import type { Company, MetricCategory, MetricDefinition, Sector } from "@proverbs/shared";
-import { compareNegativeIsBad, defaultMetricWeight, DEFAULT_RANKING_CONFIG, METRIC_CATEGORIES, SECTORS } from "@proverbs/shared";
+import { defaultMetricWeight, DEFAULT_RANKING_CONFIG, METRIC_CATEGORIES, SECTORS } from "@proverbs/shared";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { useAllRankings } from "../hooks/useAllRankings";
 import { useCustomRankings } from "../hooks/useCustomRankings";
@@ -22,14 +22,11 @@ import { usePageState } from "../hooks/usePageState";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { Slider } from "../components/ui/Slider";
-import { ScorePill } from "../components/ui/ScorePill";
-import { WatchlistButton } from "../components/ui/WatchlistButton";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { QualityGrowthScatter, type ScatterDatum } from "../components/charts/QualityGrowthScatter";
-import { TickerHoverLink } from "../components/rankings/TickerHoverLink";
 import { PresetScreens } from "../components/rankings/PresetScreens";
+import { columns } from "../components/rankings/columns";
 import { MetricInfoLabel } from "../components/metrics/MetricInfoLabel";
-import { formatCurrency, formatMultiple, formatPercent } from "../lib/utils";
 import { exportRowsAsCsv, exportRowsAsJson, exportRowsAsXlsx } from "../lib/exporters";
 import { loadLatestYearMetrics, prewarmRankingEngine } from "../lib/clientRankingEngine";
 import {
@@ -97,78 +94,6 @@ const FORMULA_EXAMPLES = [
   "(roic > 12% OR fcfYield > 5%) AND revenueGrowth1y > 0%",
   "ev_ebit < 10 AND debt_to_ebitda < 2 AND piotroski_f_score >= 7",
   "NOT (peTtm > 30)",
-];
-
-const columns: ColumnDef<Company>[] = [
-  {
-    id: "watchlist",
-    header: "",
-    cell: ({ row }) => <WatchlistButton ticker={row.original.ticker} />,
-    enableSorting: false,
-  },
-  {
-    accessorKey: "latest.overallRank",
-    header: "Rank",
-    cell: ({ row }) => row.original.latest?.overallRank ?? "—",
-    sortingFn: (a, b) => (a.original.latest?.overallRank ?? 9999) - (b.original.latest?.overallRank ?? 9999),
-  },
-  {
-    accessorKey: "ticker",
-    header: "Ticker",
-    cell: ({ row }) => <TickerHoverLink company={row.original} />,
-  },
-  { accessorKey: "companyName", header: "Company" },
-  { accessorKey: "sector", header: "Sector", cell: ({ getValue }) => getValue<string>() ?? "—" },
-  { accessorKey: "industry", header: "Industry", cell: ({ getValue }) => getValue<string>() ?? "—" },
-  { accessorKey: "country", header: "Country", cell: ({ getValue }) => getValue<string>() ?? "—" },
-  {
-    accessorKey: "latest.marketCap",
-    header: "Market Cap",
-    cell: ({ row }) => formatCurrency(row.original.latest?.marketCap ?? null, { compact: true }),
-    sortingFn: (a, b) => (a.original.latest?.marketCap ?? 0) - (b.original.latest?.marketCap ?? 0),
-  },
-  {
-    accessorKey: "latest.sharePrice",
-    header: "Price",
-    cell: ({ row }) => {
-      const latest = row.original.latest;
-      const formatted = formatCurrency(latest?.sharePrice ?? null);
-      if (latest?.priceSource !== "sec_public_float") return formatted;
-      return (
-        <span
-          className="cursor-help underline decoration-dotted decoration-muted-foreground/50"
-          title={`Approximate — no live quote available, derived from SEC EDGAR's most recent filing (as of ${latest.asOf}), not a current market price.`}
-        >
-          ~{formatted}
-        </span>
-      );
-    },
-  },
-  {
-    id: "peTtm",
-    header: "P/E",
-    cell: ({ row }) => formatMultiple(row.original.latest?.headlineMetrics?.peTtm ?? null),
-    sortingFn: (a, b) =>
-      compareNegativeIsBad(a.original.latest?.headlineMetrics?.peTtm, b.original.latest?.headlineMetrics?.peTtm),
-  },
-  {
-    id: "roic",
-    header: "ROIC",
-    cell: ({ row }) => formatPercent(row.original.latest?.headlineMetrics?.roic ?? null),
-    sortingFn: (a, b) => (a.original.latest?.headlineMetrics?.roic ?? -Infinity) - (b.original.latest?.headlineMetrics?.roic ?? -Infinity),
-  },
-  {
-    id: "dividendYield",
-    header: "Div. Yield",
-    cell: ({ row }) => formatPercent(row.original.latest?.headlineMetrics?.dividendYield ?? null),
-  },
-  {
-    accessorKey: "latest.overallScore",
-    header: "Score",
-    cell: ({ row }) => <ScorePill score={row.original.latest?.overallScore ?? null} />,
-    sortingFn: (a, b) => (a.original.latest?.overallScore ?? -1) - (b.original.latest?.overallScore ?? -1),
-  },
-  { accessorKey: "isSp500", header: "S&P 500", cell: ({ getValue }) => (getValue<boolean>() ? "Yes" : "No") },
 ];
 
 function buildCategoryDataColumn(
@@ -280,7 +205,7 @@ export function RankingsPage() {
   const [valueFilters, setValueFilters] = usePageState<ValueFilters>("rankings.valueFilters", EMPTY_VALUE_FILTERS);
   const [formulaInput, setFormulaInput] = usePageState("rankings.formulaInput", "");
   const [formulaHelpOpen, setFormulaHelpOpen] = useState(false);
-  const [sorting, setSorting] = usePageState<SortingState>("rankings.sorting", () => [{ id: "latest.overallRank", desc: false }]);
+  const [sorting, setSorting] = usePageState<SortingState>("rankings.sorting", () => [{ id: "overallRank", desc: false }]);
   const [visibility, setVisibility] = usePageState<VisibilityState>("rankings.visibility", {
     industry: false,
     country: false,
