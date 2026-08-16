@@ -1,4 +1,4 @@
-import { collections, FieldValue } from "../lib/firestore.js";
+import { collections } from "../lib/firestore.js";
 import { log } from "../lib/logger.js";
 
 const WIKI_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies";
@@ -20,7 +20,7 @@ export function parseSp500Html(html: string): string[] {
   const rows = [...tableMatch[0].matchAll(/<tr[^>]*>[\s\S]*?<\/tr>/g)];
   const tickers: string[] = [];
   for (const row of rows) {
-    const cellMatch = row[0].match(/<td[^>]*><a[^>]*>([A-Z.\-]+)<\/a><\/td>/);
+    const cellMatch = row[0].match(/<td[^>]*><a[^>]*>([A-Z.-]+)<\/a><\/td>/);
     if (cellMatch) tickers.push(cellMatch[1]);
   }
   return tickers;

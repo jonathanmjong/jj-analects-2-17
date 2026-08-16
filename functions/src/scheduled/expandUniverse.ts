@@ -29,15 +29,6 @@ interface ExpansionState {
   lockedUntil?: number;
 }
 
-async function loadState(totalTickers: number): Promise<ExpansionState> {
-  const snap = await cursorRef().get();
-  if (!snap.exists) {
-    return { cursor: 0, totalTickers, screenedCount: 0, qualifiedCount: 0, status: "in_progress" };
-  }
-  const data = snap.data() as ExpansionState;
-  return { ...data, totalTickers }; // totalTickers can grow slightly between runs as SEC adds filers; always trust the fresh count
-}
-
 /**
  * Claims the expansion lock in a transaction so overlapping invocations
  * (the schedule can fire again before a slow batch finishes) don't race on

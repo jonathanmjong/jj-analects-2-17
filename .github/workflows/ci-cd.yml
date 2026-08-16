@@ -34,6 +34,13 @@ jobs:
       - name: Typecheck & build web
         run: npm run build:web
 
+      # Runs after the builds so a type error reports as a type error rather
+      # than as lint noise. Was never wired up before, which is how a dead
+      # function and an unused import sat in functions/src unnoticed while the
+      # workspace's lint script pointed at an eslint that was never installed.
+      - name: Lint
+        run: npm run lint
+
       - name: Run unit tests
         run: npm test
 
