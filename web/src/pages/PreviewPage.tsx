@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { doc, getDoc } from "firebase/firestore";
 import { ArrowRight } from "lucide-react";
-import { db } from "../lib/firebase";
+import { loadFirestore } from "../lib/firebase";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { ScorePill } from "../components/ui/ScorePill";
@@ -28,15 +27,17 @@ export function PreviewPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getDoc(doc(db, "rankings", "preview"))
-      .then((snap) => {
+    void (async () => {
+      try {
+        const [{ doc, getDoc }, db] = await Promise.all([import("../lib/firestore"), loadFirestore()]);
+        const snap = await getDoc(doc(db, "rankings", "preview"));
         if (cancelled) return;
         const data = snap.data();
         setCompanies((data?.companies as PreviewCompany[] | undefined) ?? []);
-      })
-      .catch((e) => {
+      } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load preview.");
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };

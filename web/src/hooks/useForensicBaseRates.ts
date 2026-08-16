@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { loadFirestore } from "../lib/firebase";
 
 export interface ForensicBaseRate {
   tripped: number;
@@ -23,6 +22,7 @@ export function useForensicBaseRates() {
   return useQuery({
     queryKey: ["forensic-base-rates"],
     queryFn: async (): Promise<ForensicBaseRates | null> => {
+      const [{ doc, getDoc }, db] = await Promise.all([import("../lib/firestore"), loadFirestore()]);
       const snap = await getDoc(doc(db, "system", "forensicBaseRates"));
       return snap.exists() ? (snap.data() as ForensicBaseRates) : null;
     },

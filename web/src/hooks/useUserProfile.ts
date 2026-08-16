@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
 import type { UserProfile } from "@proverbs/shared";
-import { db } from "../lib/firebase";
+import { loadFirestore } from "../lib/firebase";
 import { useAuth } from "../context/AuthProvider";
 
 /** Live-syncing subscription to the signed-in user's Firestore profile (watchlist, etc.) — updates immediately when toggled from anywhere in the app. */
@@ -17,11 +16,24 @@ export function useUserProfile() {
       return;
     }
     setLoading(true);
-    const unsubscribe = onSnapshot(doc(db, "users", user.uid), (snap) => {
-      setProfile(snap.exists() ? (snap.data() as UserProfile) : null);
-      setLoading(false);
-    });
-    return unsubscribe;
+
+    // The listener can only be attached once the Firestore chunk has loaded, so
+    // unsubscribe has to survive an unmount that happens before then.
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    void (async () => {
+      const [{ doc, onSnapshot }, db] = await Promise.all([import("../lib/firestore"), loadFirestore()]);
+      if (cancelled) return;
+      unsubscribe = onSnapshot(doc(db, "users", user.uid), (snap) => {
+        setProfile(snap.exists() ? (snap.data() as UserProfile) : null);
+        setLoading(false);
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, [user]);
 
   return { profile, loading, watchlist: profile?.watchlist ?? [] };

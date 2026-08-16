@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import type { Firestore } from "firebase/firestore";
 import type { FloatAnchor, MarketDataPoint, ValuationHistoryEntry } from "@proverbs/shared";
-import { db } from "../lib/firebase";
+import { loadFirestore } from "../lib/firebase";
 
 export interface ValuationHistoryData {
   entries: ValuationHistoryEntry[];
@@ -27,7 +27,8 @@ function shiftDate(isoDate: string, days: number): string {
   return new Date(parsed + days * 86_400_000).toISOString().slice(0, 10);
 }
 
-async function findAnchor(symbol: string, entry: ValuationHistoryEntry): Promise<FloatAnchor | null> {
+async function findAnchor(db: Firestore, symbol: string, entry: ValuationHistoryEntry): Promise<FloatAnchor | null> {
+  const { collection, getDocs, orderBy, query, where } = await import("../lib/firestore");
   const snap = await getDocs(
     query(
       collection(db, "companies", symbol, "marketData"),
@@ -65,6 +66,11 @@ export function useValuationHistory(ticker: string | undefined) {
       if (!ticker) return { entries: [], anchors: [] };
       const symbol = ticker.toUpperCase();
 
+      const [{ collection, getDocs, orderBy, query }, db] = await Promise.all([
+        import("../lib/firestore"),
+        loadFirestore(),
+      ]);
+
       const snap = await getDocs(
         query(collection(db, "companies", symbol, "valuationHistory"), orderBy("fiscalYear", "asc")),
       );
@@ -73,7 +79,7 @@ export function useValuationHistory(ticker: string | undefined) {
         .filter((e) => typeof e.fiscalYear === "number" && typeof e.publicFloat === "number" && !!e.floatAsOf);
 
       const candidates = [...entries].sort((a, b) => b.fiscalYear - a.fiscalYear).slice(0, ANCHOR_CANDIDATE_LIMIT);
-      const anchors = (await Promise.all(candidates.map((entry) => findAnchor(symbol, entry)))).filter(
+      const anchors = (await Promise.all(candidates.map((entry) => findAnchor(db, symbol, entry)))).filter(
         (anchor): anchor is FloatAnchor => anchor !== null,
       );
 

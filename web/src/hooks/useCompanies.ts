@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { collection, getDocs, limit as fbLimit, orderBy, query, where, type QueryConstraint } from "firebase/firestore";
+import type { QueryConstraint } from "firebase/firestore";
 import type { Company, Sector } from "@proverbs/shared";
-import { db } from "../lib/firebase";
+import { loadFirestore } from "../lib/firebase";
 
 export interface CompanyListFilters {
   sector?: Sector;
@@ -14,6 +14,10 @@ export function useCompaniesList(filters: CompanyListFilters = {}) {
   return useQuery({
     queryKey: ["companies", filters],
     queryFn: async () => {
+      const [{ collection, getDocs, limit: fbLimit, orderBy, query, where }, db] = await Promise.all([
+        import("../lib/firestore"),
+        loadFirestore(),
+      ]);
       const constraints: QueryConstraint[] = [];
       if (filters.sector) constraints.push(where("sector", "==", filters.sector));
       if (filters.isSp500 !== undefined) constraints.push(where("isSp500", "==", filters.isSp500));

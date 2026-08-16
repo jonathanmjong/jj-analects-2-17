@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { doc, getDoc } from "firebase/firestore";
 import type { Company, RankingResult } from "@proverbs/shared";
-import { db } from "../lib/firebase";
+import { loadFirestore } from "../lib/firebase";
 
 export interface CompareRow {
   ticker: string;
@@ -14,6 +13,7 @@ export function useMultiCompanyDetail(tickers: string[]) {
     queryKey: ["compare-companies", tickers],
     enabled: tickers.length > 0,
     queryFn: async (): Promise<CompareRow[]> => {
+      const [{ doc, getDoc }, db] = await Promise.all([import("../lib/firestore"), loadFirestore()]);
       return Promise.all(
         tickers.map(async (ticker) => {
           const symbol = ticker.toUpperCase();

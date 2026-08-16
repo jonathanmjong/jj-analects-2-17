@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { collection, doc, getDoc, getDocs, orderBy, query } from "firebase/firestore";
 import type {
   BalanceSheet,
   CashFlowStatement,
@@ -10,7 +9,7 @@ import type {
   RankingResult,
   SentimentHeadline,
 } from "@proverbs/shared";
-import { db } from "../lib/firebase";
+import { loadFirestore } from "../lib/firebase";
 
 export interface CompanyDetail {
   company: Company;
@@ -31,6 +30,11 @@ export function useCompanyDetail(ticker: string | undefined) {
     queryFn: async (): Promise<CompanyDetail | null> => {
       if (!ticker) return null;
       const symbol = ticker.toUpperCase();
+
+      const [{ collection, doc, getDoc, getDocs, orderBy, query }, db] = await Promise.all([
+        import("../lib/firestore"),
+        loadFirestore(),
+      ]);
 
       const [
         companySnap,

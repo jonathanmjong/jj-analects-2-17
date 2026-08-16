@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { signInWithPopup, signOut as firebaseSignOut, onIdTokenChanged, type User } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db, googleProvider } from "../lib/firebase";
+import { auth, googleProvider, loadFirestore } from "../lib/firebase";
 import { clearStoredReferralCode, getStoredReferralCode } from "../lib/referral";
 import { clearPageState } from "../hooks/usePageState";
 import { clearRankingUniverseCache } from "../lib/clientRankingEngine";
@@ -19,7 +18,41 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/**
+ * Upper bound on how long auth resolution will wait for the user document.
+ * Matches idbCache's IDB_TIMEOUT_MS and exists for the same reason: this step
+ * is best-effort bookkeeping, and nothing best-effort may gate the app's
+ * loading state. Expiring the wait does NOT cancel the write — the promise
+ * keeps running, we just stop blocking the sign-in transition on it.
+ */
+const USER_DOC_TIMEOUT_MS = 3000;
+
+/**
+ * Never rejects and never blocks longer than USER_DOC_TIMEOUT_MS. Firestore is
+ * dynamically imported here (rather than statically in lib/firebase) so an
+ * anonymous visitor on the landing page never downloads the Firestore SDK; a
+ * failed or slow chunk fetch must therefore degrade to "no user doc written
+ * yet", not to a stuck sign-in.
+ */
+async function ensureUserDocumentBestEffort(user: User): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, USER_DOC_TIMEOUT_MS);
+    ensureUserDocument(user)
+      .catch((err) => {
+        console.error("Failed to ensure user document", err);
+      })
+      .finally(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+  });
+}
+
 async function ensureUserDocument(user: User): Promise<void> {
+  const [{ doc, getDoc, setDoc, serverTimestamp }, db] = await Promise.all([
+    import("../lib/firestore"),
+    loadFirestore(),
+  ]);
   const ref = doc(db, "users", user.uid);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
@@ -96,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (identityChanged) setLoading(true);
       try {
         if (nextUser) {
-          await ensureUserDocument(nextUser);
+          await ensureUserDocumentBestEffort(nextUser);
           const token = await nextUser.getIdTokenResult();
           setUser(nextUser);
           setSubscribed(token.claims.subscribed === true);
