@@ -186,6 +186,11 @@ export const METRIC_RATIONALE: Record<string, MetricRationaleEntry> = {
     verdict: "core",
     rationale: "A cash-based version of net margin — often more reliable, since it can't be inflated by non-cash accounting entries the way net income can.",
   },
+  gross_profitability: {
+    verdict: "core",
+    rationale:
+      "Novy-Marx's 2013 result, and one of the better-replicated quality measures in the academic literature: gross profit scaled by assets has historically separated forward returns at least as well as bottom-line profitability measures, and — unlike most quality signals — it has tended to complement cheapness rather than duplicate it, since profitable companies are usually the expensive ones. Gross profit sits high enough on the income statement to be relatively insulated from the accounting choices (depreciation policy, one-offs, capitalization) that move net income. The honest caveat is scale: an asset-light software company and a utility have structurally different levels here for reasons that aren't about investment quality, so it reads best within an industry. Core rather than supporting because the evidence base is strong and the input (gross profit over total assets) is about as hard to distort as this registry gets.",
+  },
 
   // --- Cash Generation ---
   ocf_margin: { verdict: "core", rationale: "Direct cash generation relative to sales — sound and hard to manipulate." },
@@ -269,6 +274,16 @@ export const METRIC_RATIONALE: Record<string, MetricRationaleEntry> = {
     verdict: "core",
     rationale:
       "Sloan's accrual anomaly, almost directly implemented — lower (or negative) accruals mean earnings are backed by real cash, historically associated with better forward stock performance. One of the most academically validated metrics in this whole registry.",
+  },
+  asset_growth: {
+    verdict: "supporting",
+    rationale:
+      "The asset-growth (or \"investment\") factor from Cooper, Gulen & Schill (2008), later formalized as the conservative-investment leg of the Fama-French five-factor model: companies that expand their balance sheets fastest have historically gone on to earn lower returns than companies that expand slowly, which is why lower is scored better here. It belongs alongside accruals rather than in the growth category — it is a statement about the balance sheet inflating, not about the business compounding. Supporting rather than core for two honest reasons: it is a blunt instrument that cannot tell a well-timed acquisition or a genuinely needed capacity build from empire-building, and it points the opposite way to this registry's growth metrics, so a fast-growing company is scored twice on the same fact with opposite signs. One year of asset change is also noisy — the signal in the literature is strongest over longer windows than five annual statements comfortably support.",
+  },
+  net_operating_assets: {
+    verdict: "supporting",
+    rationale:
+      "Hirshleifer, Hou, Teoh & Zhang (2004) — balance-sheet bloat. The idea extends Sloan's accrual anomaly from one year's flow to the accumulated stock: if reported earnings have exceeded cash generation for years, the difference piles up somewhere on the asset side, and a high level of net operating assets relative to the asset base has historically predicted weaker subsequent returns more persistently than a single year's accrual ratio. Supporting rather than core purely because of the construction available here: operating and financing items aren't separately reported in this dataset, so the ratio is assembled as equity plus debt minus cash, and this dataset's debt figure is long-term only — a company funded with short-term borrowings therefore reads lower than it should. The frame is the right one; the figure is an approximation of it, so it is weighted as one.",
   },
   fcf_exceeds_net_income: { verdict: "core", rationale: "A simple binary version of the same idea as the accrual ratio — cash-backed earnings are higher quality than accrual-heavy earnings." },
   gross_margin_stability: { verdict: "supporting", rationale: "Stable margins over time suggest pricing power or a moat, rather than exposure to commodity-like competition or one-off swings." },

@@ -9,3 +9,6 @@ export const grossMargin: MetricCalculator = (i) => grossMarginOf(i.current);
 export const operatingMargin: MetricCalculator = (i) => operatingMarginOf(i.current);
 export const netMargin: MetricCalculator = (i) => netMarginOf(i.current);
 export const freeCashFlowMargin: MetricCalculator = (i) => safeDiv(i.current.cashFlow.freeCashFlow, i.current.income.revenue);
+
+/** Gross profit / total assets (Novy-Marx, 2013). Deliberately NOT scaled by revenue — the point of the ratio is profit per dollar of assets employed, which is why it behaves differently from gross margin. */
+export const grossProfitability: MetricCalculator = (i) => safeDiv(i.current.income.grossProfit, i.current.balance.totalAssets);

@@ -10,6 +10,41 @@ export const accrualRatio: MetricCalculator = (i) => {
   return safeDiv(netIncome - operatingCashFlow, i.current.balance.totalAssets);
 };
 
+/**
+ * Year-over-year change in total assets (Cooper, Gulen & Schill, 2008). Needs a prior fiscal year,
+ * so it is null for a company with only one year of statements. A non-positive prior asset base
+ * would make the percentage meaningless rather than merely extreme, so it is suppressed too.
+ */
+export const assetGrowth: MetricCalculator = (i) => {
+  const current = i.current.balance.totalAssets;
+  const prior = i.series[1]?.balance.totalAssets;
+  if (current === null || prior === null || prior === undefined || prior <= 0) return null;
+  return (current - prior) / prior;
+};
+
+/**
+ * Net operating assets scaled by the prior year's total assets (Hirshleifer, Hou, Teoh & Zhang,
+ * 2004) — balance-sheet bloat, i.e. how much of the asset base is accumulated operating accruals.
+ *
+ * The textbook construction subtracts financing items from both sides:
+ *   operating assets      = total assets - cash and short-term investments
+ *   operating liabilities = total assets - debt - minority interest - preferred - common equity
+ * which cancels down to (equity + debt - cash), the form computed here. Two data limitations
+ * follow from this dataset and are stated in the metric's description: `totalDebt` carries
+ * long-term debt only (`shortTermDebt` is never populated), so short-term borrowings land on the
+ * operating side and pull the ratio down; and minority interest / preferred stock aren't carried
+ * at all, so they are not removed from the financing side. Short-term investments are excluded
+ * from the cash deduction for the same reason roicOf() excludes them — the field is unreliable
+ * here, and treating a missing value as zero would silently overstate the ratio.
+ */
+export const netOperatingAssets: MetricCalculator = (i) => {
+  const priorTotalAssets = i.series[1]?.balance.totalAssets;
+  if (priorTotalAssets === null || priorTotalAssets === undefined || priorTotalAssets <= 0) return null;
+  const { totalEquity, totalDebt, cashAndEquivalents } = i.current.balance;
+  if (totalEquity === null || totalDebt === null || cashAndEquivalents === null) return null;
+  return (totalEquity + totalDebt - cashAndEquivalents) / priorTotalAssets;
+};
+
 /** 1 if FCF exceeds reported net income (cash-backed earnings), else 0. */
 export const fcfExceedsNetIncome: MetricCalculator = (i) => {
   const { freeCashFlow } = i.current.cashFlow;

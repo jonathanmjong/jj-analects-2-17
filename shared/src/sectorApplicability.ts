@@ -75,6 +75,16 @@ export const SECTOR_INAPPLICABLE_METRICS: Record<string, InapplicableMetricGroup
         "turnover measures assume inventory and trade receivables from an operating cycle that financial businesses do not have",
       metricKeys: ["asset_turnover", "inventory_turnover", "receivable_turnover", "cash_conversion_cycle"],
     },
+    {
+      reason:
+        "gross profit is not a line a lending or underwriting business reports, and its total assets measure the size of the balance sheet it funds rather than an operating asset base to earn profit on",
+      metricKeys: ["gross_profitability"],
+    },
+    {
+      reason:
+        "operating and financing items cannot be separated on a balance sheet where the liabilities — deposits, policy reserves, wholesale funding — are the raw material of the business rather than a financing decision",
+      metricKeys: ["net_operating_assets"],
+    },
   ],
 
   // REITs. Far closer to operating companies than banks are — enterprise value, debt/EBITDA and

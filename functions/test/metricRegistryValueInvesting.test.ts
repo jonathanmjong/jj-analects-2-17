@@ -104,6 +104,13 @@ describe("metric registry — negativeIsBad correctness", () => {
     "capex_to_revenue",
     "revenue_volatility",
     "eps_volatility",
+    // A shrinking asset base is the good end of the asset-growth factor, and net operating
+    // assets below zero (operating liabilities exceeding operating assets — a business its
+    // suppliers and customers finance) is the good end of balance-sheet bloat. Both denominators
+    // are a prior year's total assets, which the calculators suppress unless positive, so a
+    // negative reading here can only come from a genuinely negative numerator.
+    "asset_growth",
+    "net_operating_assets",
   ]);
 
   it("every known ratio-over-possibly-negative-denominator metric is flagged negativeIsBad", () => {
@@ -237,6 +244,9 @@ describe("metric registry — direction matches value-investing logic, not just 
     operating_margin: "desc",
     net_margin: "desc",
     fcf_margin: "desc",
+    // Gross profit per dollar of assets (Novy-Marx) — more profit on the same asset base is
+    // better, same direction as every other profitability measure here.
+    gross_profitability: "desc",
     ocf_margin: "desc",
     fcf_to_revenue: "desc",
     fcf_to_net_income: "desc",
@@ -272,6 +282,13 @@ describe("metric registry — direction matches value-investing logic, not just 
     revenue_volatility: "asc",
     eps_volatility: "asc",
     piotroski_f_score: "desc",
+    // Balance-sheet expansion signals: both are "asc" on purpose, which is the entire point of
+    // adding them. Fast asset growth (Cooper/Gulen/Schill's investment factor) and a high stock
+    // of net operating assets (Hirshleifer et al.'s balance-sheet bloat) have both historically
+    // preceded weaker returns, so a bigger number is the worse end — the opposite reading to the
+    // growth category, deliberately.
+    asset_growth: "asc",
+    net_operating_assets: "asc",
     // Moat: sustained high returns/margins are stronger evidence of a durable moat. rnd_to_revenue
     // is "asc" (lower is better) to match capex_to_revenue's reinvestment-intensity logic — see
     // the file-level doc comment. intangible_assets_pct stays "desc": price_tangible_book already

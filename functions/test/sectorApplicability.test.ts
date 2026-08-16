@@ -28,6 +28,8 @@ const FINANCIALS_INAPPLICABLE = [
   "inventory_turnover",
   "receivable_turnover",
   "cash_conversion_cycle",
+  "gross_profitability",
+  "net_operating_assets",
 ];
 
 // Metrics that must survive the gate: without these a bank has almost nothing left to be scored
@@ -53,6 +55,10 @@ const FINANCIALS_APPLICABLE = [
   "eps_volatility",
   "growth_revenue_1y",
   "growth_bookValue_5y",
+  // A bank's total assets ARE its loan book, so year-over-year growth in them is a real,
+  // readable fact about how fast it is lending — unlike gross profitability and net operating
+  // assets, nothing about the accounting makes the number meaningless here.
+  "asset_growth",
 ];
 
 const REAL_ESTATE_INAPPLICABLE = ["pe_ttm", "inventory_turnover", "receivable_turnover", "cash_conversion_cycle"];
@@ -60,7 +66,23 @@ const REAL_ESTATE_INAPPLICABLE = ["pe_ttm", "inventory_turnover", "receivable_tu
 // Deliberately kept applicable for REITs: unlike banks, a property portfolio has a real capital
 // structure and real interest expense, so these are standard ways to look at one — arguable at
 // worst, not meaningless.
-const REAL_ESTATE_APPLICABLE = ["ev_ebit", "ev_ebitda", "ev_fcf", "debt_to_ebitda", "interest_coverage", "roic", "pb", "ps"];
+const REAL_ESTATE_APPLICABLE = [
+  "ev_ebit",
+  "ev_ebitda",
+  "ev_fcf",
+  "debt_to_ebitda",
+  "interest_coverage",
+  "roic",
+  "pb",
+  "ps",
+  // Rental revenue less property operating costs, over a portfolio carried at depreciated cost,
+  // is a real quantity; so is portfolio expansion; and a REIT's properties really are operating
+  // assets funded by equity and debt. Depreciated historical cost makes all three arguable for a
+  // property company — which is the bar for staying applicable, not for being excluded.
+  "gross_profitability",
+  "asset_growth",
+  "net_operating_assets",
+];
 
 describe("sectorApplicability — Financials", () => {
   it.each(FINANCIALS_INAPPLICABLE)("marks %s inapplicable", (key) => {
