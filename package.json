@@ -2,7 +2,7 @@
   "name": "analects-2-17",
   "private": true,
   "version": "0.1.0",
-  "description": "Analects 2.17 — a multi-factor investment ranking platform for mid/large-cap equities",
+  "description": "Analects 2.17 \u2014 a multi-factor investment ranking platform for mid/large-cap equities",
   "workspaces": [
     "shared",
     "web",
@@ -18,10 +18,11 @@
     "build:functions": "npm run build --workspace functions",
     "test": "npm run test --workspace shared --if-present && npm run test --workspace functions --if-present && npm run test --workspace web --if-present",
     "test:e2e": "playwright test",
-    "lint": "npm run lint --workspace web --if-present && npm run lint --workspace functions --if-present",
+    "lint": "oxlint web/src functions/src shared/src",
     "emulators": "firebase emulators:start"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1"
+    "@playwright/test": "^1.61.1",
+    "oxlint": "^1.71.0"
   }
 }
