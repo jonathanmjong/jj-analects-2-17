@@ -9,6 +9,7 @@ export * from "./valuationHistory.js";
 export * from "./metrics.js";
 export * from "./metricRationale.js";
 export * from "./momentum.js";
+export * from "./normalizedEarnings.js";
 export * from "./ranking.js";
 export * from "./rankingEngineCore.js";
 export * from "./rankingMath.js";

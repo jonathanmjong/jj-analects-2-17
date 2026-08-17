@@ -153,7 +153,8 @@ const SECTOR_ALIASES: Record<string, string> = {
   reits: "Real Estate",
 };
 
-function canonicalSector(sector: string | null | undefined): string | null {
+/** Exported so sector-gated logic outside the metric registry (normalizedEarnings.ts) matches on the same normalized form rather than comparing raw provider strings. */
+export function canonicalSector(sector: string | null | undefined): string | null {
   if (!sector) return null;
   const normalized = sector.trim().toLowerCase().replace(/[\s_-]+/g, " ");
   return SECTOR_ALIASES[normalized] ?? null;

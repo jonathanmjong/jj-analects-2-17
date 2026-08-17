@@ -19,6 +19,7 @@ import { SentimentSourcePicker } from "../components/sentiment/SentimentSourcePi
 import { CapitalAllocationPanel } from "../components/company/CapitalAllocationPanel";
 import { ForensicPanel } from "../components/company/ForensicPanel";
 import { GrowthRoicChart } from "../components/company/GrowthRoicChart";
+import { NormalizedEarningsPanel } from "../components/company/NormalizedEarningsPanel";
 import { ReverseDcfPanel } from "../components/company/ReverseDcfPanel";
 import { ScenarioTool } from "../components/company/ScenarioTool";
 import { StatementsExplorer } from "../components/company/StatementsExplorer";
@@ -352,6 +353,12 @@ export function CompanyPage() {
             todayMarketCap={data.company.latest?.marketCap ?? null}
             income={data.income}
             balance={data.balance}
+            priceSource={data.company.latest?.priceSource}
+          />
+          <NormalizedEarningsPanel
+            ticker={data.company.ticker}
+            sector={data.company.sector ?? null}
+            todayMarketCap={data.company.latest?.marketCap ?? null}
             priceSource={data.company.latest?.priceSource}
           />
           <CapitalAllocationPanel
