@@ -26,6 +26,8 @@ interface ExpansionState {
   screenedCount: number;
   qualifiedCount: number;
   status: "in_progress" | "complete";
+  /** Increments each time the screen wraps back to the start of SEC's ticker list. */
+  cycleCount?: number;
   lockedUntil?: number;
 }
 
@@ -42,11 +44,23 @@ async function claimLock(totalTickers: number): Promise<ExpansionState | null> {
       ? { ...(snap.data() as ExpansionState), totalTickers }
       : { cursor: 0, totalTickers, screenedCount: 0, qualifiedCount: 0, status: "in_progress" };
 
-    if (state.status === "complete" && state.cursor >= totalTickers) return null;
     if (state.lockedUntil && state.lockedUntil > Date.now()) return null; // another invocation is actively running
 
-    tx.set(cursorRef(), { ...state, lockedUntil: Date.now() + LOCK_DURATION_MS }, { merge: true });
-    return state;
+    // Finishing a pass starts the next one instead of stopping forever. The
+    // screen used to latch on status: "complete" and this lock then refused
+    // every subsequent invocation, so the universe froze at whatever qualified
+    // on the first full sweep (2026-07-24) while cleanupUniverse kept removing
+    // companies — it could only ever shrink. Nothing could join afterwards: a
+    // new listing, a company crossing the float floor, or one whose filings
+    // only became readable later (XOM, whose ticker SEC had repointed at a
+    // holdco with no financials, was invisible to this screen for that reason).
+    const wrapped = state.cursor >= totalTickers;
+    const claimed: ExpansionState = wrapped
+      ? { ...state, cursor: 0, screenedCount: 0, qualifiedCount: 0, cycleCount: (state.cycleCount ?? 0) + 1, status: "in_progress" }
+      : state;
+
+    tx.set(cursorRef(), { ...claimed, lockedUntil: Date.now() + LOCK_DURATION_MS }, { merge: true });
+    return claimed;
   });
 }
 
@@ -147,8 +161,8 @@ export const expandUniverse = onSchedule(
     );
 
     log.info(
-      `expandUniverse: screened ${nextCursor}/${allTickers.length} (+${qualifiedThisRun} qualified this run, ` +
-        `${state.qualifiedCount + qualifiedThisRun} total qualified)`,
+      `expandUniverse: cycle ${state.cycleCount ?? 0}, screened ${nextCursor}/${allTickers.length} ` +
+        `(+${qualifiedThisRun} qualified this run, ${state.qualifiedCount + qualifiedThisRun} this pass)`,
     );
 
     await logRefresh("universe_screening", "sec_edgar", { succeeded, failed }, startedAt);
