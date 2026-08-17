@@ -21,6 +21,21 @@ Running list of known open items. Not a full backlog — just things worth not f
   entry (not name-matching, which could attach one company's fundamentals to another) plus a
   warning when a bundle returns no income AND no balance statements. Any future
   reorganization will hit this — the warning is how you'll find out.
+- **Normalized-earnings metrics are NOT in the ranking registry (2026-08-17).** The panel
+  ("Earnings Across the Cycle") ships and reads `valuationHistory` directly via its hook, but
+  `cape_ratio` / `earnings_vs_normalized` are deliberately absent from `definitions.ts`:
+  `computeMetricsForCompany` builds `MetricInput` from four Firestore reads and never touches
+  `valuationHistory`, so a calculator would see ≤6 years — under the 7-year minimum — and
+  return null for every company. To wire it: add a fifth read
+  (`collections.valuationHistory(symbol)`, accessor already exists), add the field to
+  `MetricInput`, and decide the period-accuracy question — `computeMetrics` writes 5 period
+  rows and a naive CAPE would write the SAME value into all five, so the engine's year
+  weighting would average five copies of one number. Slice the window to end at each row's
+  fiscal year; the numerator still uses today's market cap, which is the known limitation
+  already documented at the top of that file. Also open: `earnings_vs_normalized` under
+  `direction: "asc"` would rank the deepest loss best, since its numerator can go negative
+  while the denominator is guarded positive — needs suppression when latest netIncome < 0.
+  Check the ≥7-year population first; if it is small, ship `enabled: false`.
 - **Residual XBRL data gaps after the 2026-08-15 net-income fix.** Net income nulls went
   134/1344 (10%) → 40 (3%) by resolving `NetIncomeLoss` →
   `NetIncomeLossAvailableToCommonStockholdersBasic` → `ProfitLoss` per fiscal period. What is
