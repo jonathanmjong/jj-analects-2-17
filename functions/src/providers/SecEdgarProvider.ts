@@ -200,6 +200,103 @@ export const NET_INCOME_TAGS = [
 ];
 
 /**
+ * Gross profit. Only ever `GrossProfit` — there is no second us-gaap element for the subtotal, and
+ * a filer that omits it has genuinely not published one (verified on EDGAR: MRK, LLY, UNH, PG, PFE
+ * and MCD have no `GrossProfit` concept in any year). The list exists so the field is resolved
+ * through the same strict-precedence path as everything else here, and so a future addition can't
+ * be bolted on as a plain `annualSeries` merge.
+ *
+ * The real fallback for those filers is DERIVATION from revenue and cost of revenue — see
+ * COST_OF_REVENUE_TAGS and extractIncomeStatements. That reaches MRK/LLY/UNH/PG/PFE but not
+ * MCD/DIS/SO/NEE/SPG/PLD, which tag no cost-of-revenue concept either: restaurants, utilities and
+ * REITs largely do not present a gross-profit line at all, so those stay null by nature, not by
+ * omission.
+ */
+export const GROSS_PROFIT_TAGS = ["GrossProfit"];
+
+/**
+ * Cost of revenue, in strict per-period precedence order.
+ *
+ * Validated against live EDGAR rather than assumed: across ~60 filers, for every annual period where
+ * the filer reports BOTH `GrossProfit` and revenue, the implied cost (revenue - gross profit) was
+ * compared to each candidate tag.
+ *   - `CostOfRevenue` matched 214/214 periods exactly. It is the total, always.
+ *   - `CostOfGoodsAndServicesSold` matched 258/270; the 12 misses are filers whose own
+ *     `GrossProfit` is a partial subtotal (DD, LHX report a NEGATIVE implied cost), not a tagging
+ *     problem with this concept.
+ *   - `CostOfGoodsSold` matched 8/82 and `CostOfServices` 6/82 — both are overwhelmingly ONE
+ *     COMPONENT of a goods/services split, not the total (ADBE FY2017: `CostOfGoodsSold` is $57M
+ *     against a real $1,010M cost of revenue; IBM FY2016: $6.6B against $41.4B). They are
+ *     deliberately EXCLUDED: populating cost of revenue from a component would understate it and,
+ *     worse, derive a wildly overstated gross profit. Summing the pair is not a fix either — where
+ *     both are present their sum still missed the true total in 27 of 45 periods (IBM is short by
+ *     ~2% every year; ADBE's pair covers 38% of its actual cost), because filers split into three
+ *     or more lines and only tag two of them.
+ *
+ * `CostOfRevenue` ranks first on that perfect match rate. Order matters for the filers reporting
+ * both: CAT tags `CostOfRevenue` $44.8B and `CostOfGoodsAndServicesSold` $49M (a rounding-error
+ * sliver) for the same FY2025 period end, so the reverse order would report a ~99.9% gross margin.
+ */
+export const COST_OF_REVENUE_TAGS = ["CostOfRevenue", "CostOfGoodsAndServicesSold"];
+
+/**
+ * Total debt, in strict per-period precedence order, ordered by ACCOUNTING-BASIS PROXIMITY to
+ * "long-term debt, excluding current maturities" — the basis this field has always carried.
+ *
+ * Verified live on EDGAR. Reading only `LongTermDebtNoncurrent` left ~half the universe null, and
+ * a null here is not a null downstream: ingestPrices treats missing debt as ZERO, so enterprise
+ * value was silently understated for every one of them.
+ *
+ * 1. `LongTermDebtNoncurrent` — the exact basis, and what every currently-correct company already
+ *    resolves to. Must never be displaced.
+ * 2. `LongTermDebtAndCapitalLeaseObligations` — the SAME noncurrent basis, additionally including
+ *    finance-lease obligations. Measured against tag 1 across 31 filers, it was byte-identical in
+ *    44 of 58 overlapping periods and within 0.3-5.8% on the rest (DUK 2009-2011, UPS 2011). It is
+ *    the current tag for filers that have no tag 1 at all in recent years — XOM (FY2025 $34.2B),
+ *    SO, CVX, VZ, BA, GE, HON, UNP, IBM, CVS, ABBV.
+ * 3. `LongTermNotesPayable` — noncurrent, but notes only, so it can understate a filer with other
+ *    long-term borrowings (MSFT FY2011: $10.75B vs $11.92B on tag 1). Still ranked above the
+ *    including-current-maturities tags because it is on the right basis, and because ORCL — whose
+ *    only usable series this is, 2009-2026 — tags a lone dimensionless `LongTermDebt` of ZERO at
+ *    FY2022. Behind tag 4, Oracle's FY2022 debt would resolve to $0 instead of ~$122B.
+ * 4. `LongTermDebt` — long-term debt INCLUDING current maturities. Broader than the field's stated
+ *    basis (AAPL FY2025: $90.7B vs $78.3B noncurrent; 226 of 254 overlapping periods differ,
+ *    systematically ~10-16% higher) but still debt-only, no short-term borrowings. Recovers
+ *    BAC/WFC/C/MS/AXP/PNC/BLK/PLD/SPG/PSA/T/HD/AMT.
+ * 5. `LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities` — tag 4's basis plus
+ *    finance leases. Not in the original candidate set; added because it is the ONLY series
+ *    JPM (FY2025 $435B), USB and MET have carried since ~2013.
+ * 6. `DebtLongtermAndShorttermCombinedAmount` — LAST RESORT, and the one tag that changes what
+ *    this field MEANS: it includes short-term borrowings, so for a filer resolved here `totalDebt`
+ *    is total debt, not long-term debt (0 of 42 overlapping periods matched tag 1; LLY FY2014 was
+ *    +50%). Kept because the alternative is worse — GS has had no other tag since 2018, and
+ *    leaving it null makes its enterprise value understate debt by ~$356B rather than overstate it
+ *    by its short-term borrowings. The caveat is documented on `BalanceSheet.totalDebt`.
+ *
+ * Not recoverable at all: Deere moved to a company-extension element after FY2021, and no us-gaap
+ * tag carries its long-term borrowings.
+ */
+export const TOTAL_DEBT_TAGS = [
+  "LongTermDebtNoncurrent",
+  "LongTermDebtAndCapitalLeaseObligations",
+  "LongTermNotesPayable",
+  "LongTermDebt",
+  "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities",
+  "DebtLongtermAndShorttermCombinedAmount",
+];
+
+/**
+ * The subset of TOTAL_DEBT_TAGS that is NOT "long-term debt, excluding current maturities" — a
+ * value resolved from one of these is a broader quantity than the field's nominal basis. Used only
+ * to log which filers that applies to; nothing branches on it.
+ */
+const BROADER_THAN_LONG_TERM_DEBT_TAGS = new Set([
+  "LongTermDebt",
+  "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities",
+  "DebtLongtermAndShorttermCombinedAmount",
+]);
+
+/**
  * Distinct tags that supplied a value within the same most-recent-`periods` window
  * annualSeriesWithFallback returns, in precedence order. Provenance for logging only — a filer that
  * used a fallback only in years that got trimmed away is not interesting.
@@ -262,7 +359,7 @@ export interface AnnualFundamentalsObservation {
   revenue: number | null;
   totalEquity: number | null;
   operatingIncome: number | null;
-  /** Long-term debt only — that is what this dataset reliably carries (see extractBalanceSheets). */
+  /** Resolved through TOTAL_DEBT_TAGS — usually long-term debt only, see `BalanceSheet.totalDebt`. */
   totalDebt: number | null;
   cashAndEquivalents: number | null;
   sharesOutstandingDiluted: number | null;
@@ -323,9 +420,9 @@ export function parsePublicFloatHistory(
 /**
  * Pure parse of a companyfacts response into the per-fiscal-year line items
  * needed to form valuation multiples. Deliberately limited to fields this
- * dataset actually carries — costOfRevenue, ebitda, eps and shortTermDebt are
- * null for every filer here (see extractIncomeStatements/extractBalanceSheets),
- * so nothing downstream may depend on them.
+ * dataset actually carries — ebitda, eps and shortTermDebt are null for every
+ * filer here (see extractIncomeStatements/extractBalanceSheets), so nothing
+ * downstream may depend on them.
  */
 export function parseAnnualFundamentalsHistory(
   facts: CompanyFacts | null,
@@ -336,7 +433,7 @@ export function parseAnnualFundamentalsHistory(
   const revenue = annualSeries(facts, revenueTags, years);
   const totalEquity = annualSeries(facts, ["StockholdersEquity"], years);
   const operatingIncome = annualSeries(facts, ["OperatingIncomeLoss"], years);
-  const totalDebt = annualSeries(facts, ["LongTermDebtNoncurrent"], years);
+  const totalDebt = annualSeriesWithFallback(facts, TOTAL_DEBT_TAGS, years);
   const cash = annualSeries(facts, ["CashAndCashEquivalentsAtCarryingValue"], years);
   const dilutedShares = annualSeries(facts, ["WeightedAverageNumberOfDilutedSharesOutstanding"], years);
 
@@ -512,7 +609,8 @@ export class SecEdgarProvider extends FinancialDataProvider {
 
   private extractIncomeStatements(facts: CompanyFacts | null, periods: number, ticker?: string): IncomeStatement[] {
     const revenue = annualSeries(facts, ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"], periods);
-    const grossProfit = annualSeries(facts, ["GrossProfit"], periods);
+    const grossProfit = annualSeriesWithFallback(facts, GROSS_PROFIT_TAGS, periods);
+    const costOfRevenue = annualSeriesWithFallback(facts, COST_OF_REVENUE_TAGS, periods);
     const rnd = annualSeries(facts, ["ResearchAndDevelopmentExpense"], periods);
     const opIncome = annualSeries(facts, ["OperatingIncomeLoss"], periods);
     const interestExpense = annualSeries(facts, ["InterestExpense"], periods);
@@ -533,31 +631,42 @@ export class SecEdgarProvider extends FinancialDataProvider {
     }
 
     const years = topYears(revenue.size ? revenue : netIncome, periods);
-    return years.map((fy) => ({
-      periodKey: `${fy}-FY`,
-      periodType: "FY" as const,
-      fiscalYear: fy,
-      periodEnd: `${fy}-12-31`,
-      filedAt: null,
-      sourceProvider: this.name,
-      revenue: revenue.get(fy) ?? null,
-      costOfRevenue: null,
-      grossProfit: grossProfit.get(fy) ?? null,
-      researchAndDevelopment: rnd.get(fy) ?? null,
-      operatingIncome: opIncome.get(fy) ?? null,
-      ebit: opIncome.get(fy) ?? null,
-      ebitda: null,
-      interestExpense: interestExpense.get(fy) ?? null,
-      pretaxIncome: pretax.get(fy) ?? null,
-      incomeTaxExpense: tax.get(fy) ?? null,
-      netIncome: netIncome.get(fy) ?? null,
-      eps: null,
-      epsDiluted: epsDiluted.get(fy) ?? null,
-      sharesOutstandingDiluted: dilutedShares.get(fy) ?? null,
-    }));
+    return years.map((fy) => {
+      const revenueVal = revenue.get(fy) ?? null;
+      const costOfRevenueVal = costOfRevenue.get(fy) ?? null;
+      const reportedGrossProfit = grossProfit.get(fy) ?? null;
+      return {
+        periodKey: `${fy}-FY`,
+        periodType: "FY" as const,
+        fiscalYear: fy,
+        periodEnd: `${fy}-12-31`,
+        filedAt: null,
+        sourceProvider: this.name,
+        revenue: revenueVal,
+        costOfRevenue: costOfRevenueVal,
+        // DERIVED, not reported, whenever the filer publishes no GrossProfit subtotal — the common
+        // case (MRK, LLY, UNH, PG, PFE...) rather than the exotic one. A reported GrossProfit
+        // always wins; derivation needs BOTH inputs, so a missing revenue or cost leaves this null
+        // rather than silently reading as "zero cost of revenue".
+        grossProfit:
+          reportedGrossProfit ??
+          (revenueVal !== null && costOfRevenueVal !== null ? revenueVal - costOfRevenueVal : null),
+        researchAndDevelopment: rnd.get(fy) ?? null,
+        operatingIncome: opIncome.get(fy) ?? null,
+        ebit: opIncome.get(fy) ?? null,
+        ebitda: null,
+        interestExpense: interestExpense.get(fy) ?? null,
+        pretaxIncome: pretax.get(fy) ?? null,
+        incomeTaxExpense: tax.get(fy) ?? null,
+        netIncome: netIncome.get(fy) ?? null,
+        eps: null,
+        epsDiluted: epsDiluted.get(fy) ?? null,
+        sharesOutstandingDiluted: dilutedShares.get(fy) ?? null,
+      };
+    });
   }
 
-  private extractBalanceSheets(facts: CompanyFacts | null, periods: number): BalanceSheet[] {
+  private extractBalanceSheets(facts: CompanyFacts | null, periods: number, ticker?: string): BalanceSheet[] {
     const cash = annualSeries(facts, ["CashAndCashEquivalentsAtCarryingValue"], periods);
     const receivables = annualSeries(facts, ["AccountsReceivableNetCurrent"], periods);
     const inventory = annualSeries(facts, ["InventoryNet"], periods);
@@ -567,10 +676,22 @@ export class SecEdgarProvider extends FinancialDataProvider {
     const goodwill = annualSeries(facts, ["Goodwill"], periods);
     const currentLiabilities = annualSeries(facts, ["LiabilitiesCurrent"], periods);
     const payables = annualSeries(facts, ["AccountsPayableCurrent"], periods);
-    const longTermDebt = annualSeries(facts, ["LongTermDebtNoncurrent"], periods);
+    const longTermDebt = annualSeriesWithFallback(facts, TOTAL_DEBT_TAGS, periods);
     const totalLiabilities = annualSeries(facts, ["Liabilities"], periods);
     const equity = annualSeries(facts, ["StockholdersEquity"], periods);
     const retainedEarnings = annualSeries(facts, ["RetainedEarningsAccumulatedDeficit"], periods);
+
+    // Nothing in the BalanceSheet shape records which tag a debt figure came from, and the lower
+    // half of TOTAL_DEBT_TAGS is a broader quantity than "long-term debt" — leave the provenance
+    // in the logs for the filers where that applies, as extractIncomeStatements does for net income.
+    if (ticker) {
+      const debtTags = tagsUsed(facts, TOTAL_DEBT_TAGS, periods).filter((tag) =>
+        BROADER_THAN_LONG_TERM_DEBT_TAGS.has(tag),
+      );
+      if (debtTags.length > 0) {
+        log.info(`extractBalanceSheets(${ticker}): total debt includes non-long-term basis from ${debtTags.join(" + ")}`);
+      }
+    }
 
     const years = topYears(totalAssets.size ? totalAssets : equity, periods);
     return years.map((fy) => {
@@ -742,7 +863,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
 
   async getBalanceSheets(ticker: string, periods: number): Promise<BalanceSheet[]> {
     const cik = await this.cikFor(ticker);
-    return this.extractBalanceSheets(cik ? await this.fetchCompanyFacts(cik) : null, periods);
+    return this.extractBalanceSheets(cik ? await this.fetchCompanyFacts(cik) : null, periods, ticker);
   }
 
   async getCashFlowStatements(ticker: string, periods: number): Promise<CashFlowStatement[]> {
@@ -766,7 +887,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
       cik,
       profile: this.buildProfile(ticker, cik, submission),
       income: this.extractIncomeStatements(facts, periods, ticker),
-      balance: this.extractBalanceSheets(facts, periods),
+      balance: this.extractBalanceSheets(facts, periods, ticker),
       cashFlow: this.extractCashFlowStatements(facts, periods),
       approxMarketValue: this.extractApproxMarketValue(cik, facts),
     };

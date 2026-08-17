@@ -73,6 +73,13 @@ async function resolveQuote(symbol: string): Promise<ResolvedQuote | null> {
     ]);
     const sharesOutstanding = (latestIncomeSnap.docs[0]?.data()?.sharesOutstandingDiluted as number | null) ?? null;
     const revenue = (latestIncomeSnap.docs[0]?.data()?.revenue as number | null) ?? null;
+    // Unknown debt is DELIBERATELY treated as zero (and unknown cash likewise), which understates
+    // EV for a leveraged filer whose debt we couldn't read — the alternative, a null EV, drops the
+    // company out of EV/EBIT, EV/FCF and earnings yield entirely, and computeMetrics would rebuild
+    // it with this same assumption anyway. Defensible only because the miss rate is now small:
+    // widening the provider's debt tag precedence (TOTAL_DEBT_TAGS) cut null totalDebt from ~48%
+    // of the universe to ~11%, and a good share of that residual is genuinely debt-free. Revisit
+    // if that residual grows.
     const totalDebt = (latestBalanceSnap.docs[0]?.data()?.totalDebt as number | null) ?? 0;
     const cash = (latestBalanceSnap.docs[0]?.data()?.cashAndEquivalents as number | null) ?? 0;
     const marketCap = sharesOutstanding !== null ? liveQuote.sharePrice * sharesOutstanding : 0;

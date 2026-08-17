@@ -284,8 +284,9 @@ export function computeForensicFlags(input: ForensicInput): ForensicReport {
     }
   }
 
-  // 5. Gross-margin erosion. costOfRevenue is null throughout this dataset, so margin comes
-  // from the reported grossProfit line only.
+  // 5. Gross-margin erosion, off the grossProfit line — which for filers that publish no
+  // GrossProfit subtotal is derived upstream as revenue - costOfRevenue (see SecEdgarProvider),
+  // so this check now reaches companies whose margin was previously unmeasurable.
   {
     const gm0 = grossMargin(p0);
     const gm1 = grossMargin(p1);

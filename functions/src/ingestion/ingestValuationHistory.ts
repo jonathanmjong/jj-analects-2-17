@@ -47,7 +47,7 @@ export interface ValuationHistoryDoc {
   revenue: number | null;
   totalEquity: number | null;
   operatingIncome: number | null;
-  /** Long-term debt only — the one debt figure this dataset reliably carries. */
+  /** Usually long-term debt only, but not on a uniform basis — see `BalanceSheet.totalDebt`. */
   totalDebt: number | null;
   cash: number | null;
   sharesOutstanding: number | null;

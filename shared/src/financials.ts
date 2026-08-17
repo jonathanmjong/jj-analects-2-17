@@ -42,6 +42,22 @@ export interface BalanceSheet extends StatementPeriodMeta {
   accountsPayable: number | null;
   shortTermDebt: number | null;
   longTermDebt: number | null;
+  /**
+   * USUALLY long-term debt excluding current maturities — `shortTermDebt` is never populated, so
+   * this is not "total debt" in the textbook sense for most companies.
+   *
+   * The exception, and the reason this is not a flat promise: the SEC EDGAR provider resolves it
+   * through a tag-precedence list (see TOTAL_DEBT_TAGS), and its lower-precedence tags carry
+   * BROADER quantities — `LongTermDebt` and
+   * `LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities` include current maturities,
+   * and `DebtLongtermAndShorttermCombinedAmount` (last resort, ~1% of the universe) includes
+   * short-term borrowings, making this genuinely total debt for those filers. Reading only the
+   * long-term-noncurrent tag left ~half the universe null, and null is not harmless here: a
+   * missing figure is treated as ZERO debt when enterprise value is formed, which understates EV
+   * and makes leveraged companies look cheap. A slightly broader basis for some filers is the
+   * lesser error, but the basis is NOT uniform across companies — do not treat small
+   * cross-company differences in debt-derived ratios as meaningful.
+   */
   totalDebt: number | null;
   totalLiabilities: number | null;
   totalEquity: number | null;

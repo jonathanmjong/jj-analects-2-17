@@ -19,14 +19,17 @@ function incomePeriod(fiscalYear: number, fields: Record<string, number | null>)
 describe("row configs", () => {
   it("omits the always-null fields in this dataset", () => {
     const keys = INCOME_ROWS.map((r) => r.key);
-    expect(keys).not.toContain("costOfRevenue");
     expect(keys).not.toContain("ebitda");
     expect(keys).not.toContain("eps");
     expect(BALANCE_ROWS.map((r) => r.key)).not.toContain("shortTermDebt");
   });
 
-  it("labels totalDebt as long-term only", () => {
-    expect(BALANCE_ROWS.find((r) => r.key === "totalDebt")?.label).toBe("Debt (long-term)");
+  it("shows cost of revenue, which the SEC EDGAR provider now populates", () => {
+    expect(INCOME_ROWS.map((r) => r.key)).toContain("costOfRevenue");
+  });
+
+  it("no longer labels totalDebt as long-term, since its basis varies by filer", () => {
+    expect(BALANCE_ROWS.find((r) => r.key === "totalDebt")?.label).toBe("Debt");
   });
 });
 

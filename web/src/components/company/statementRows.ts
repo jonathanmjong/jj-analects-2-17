@@ -31,10 +31,11 @@ export interface StatementPeriod {
   fiscalYear: number;
 }
 
-/** costOfRevenue, ebitda and eps are null for every company in this dataset (never populated by
- * either live provider), so they are absent by design rather than rendered as empty rows. */
+/** ebitda and eps are null for every company in this dataset (never populated by either live
+ * provider), so they are absent by design rather than rendered as empty rows. */
 export const INCOME_ROWS: RowConfig[] = [
   { key: "revenue", label: "Revenue", indent: 0, unit: "currency" },
+  { key: "costOfRevenue", label: "Cost of Revenue", indent: 1, unit: "currency" },
   { key: "grossProfit", label: "Gross Profit", indent: 0, unit: "currency" },
   { key: "researchAndDevelopment", label: "Research & Development", indent: 1, unit: "currency" },
   { key: "operatingIncome", label: "Operating Income", indent: 0, unit: "currency" },
@@ -47,8 +48,9 @@ export const INCOME_ROWS: RowConfig[] = [
   { key: "sharesOutstandingDiluted", label: "Diluted Shares", indent: 1, unit: "shares" },
 ];
 
-/** shortTermDebt is null for every company here, and totalDebt is therefore long-term debt only —
- * labelled as such instead of implying it includes current maturities. */
+/** shortTermDebt is null for every company here. totalDebt is long-term debt for most filers but
+ * resolves to a broader basis for the minority whose XBRL only offers one (see
+ * `BalanceSheet.totalDebt`), so the label no longer promises "long-term" for every company. */
 export const BALANCE_ROWS: RowConfig[] = [
   { key: "cashAndEquivalents", label: "Cash & Equivalents", indent: 1, unit: "currency" },
   { key: "shortTermInvestments", label: "Short-Term Investments", indent: 1, unit: "currency" },
@@ -60,7 +62,7 @@ export const BALANCE_ROWS: RowConfig[] = [
   { key: "totalAssets", label: "Total Assets", indent: 0, unit: "currency" },
   { key: "accountsPayable", label: "Accounts Payable", indent: 1, unit: "currency" },
   { key: "totalCurrentLiabilities", label: "Total Current Liabilities", indent: 0, unit: "currency" },
-  { key: "totalDebt", label: "Debt (long-term)", indent: 1, unit: "currency" },
+  { key: "totalDebt", label: "Debt", indent: 1, unit: "currency" },
   { key: "longTermDebt", label: "Long-Term Debt", indent: 1, unit: "currency", dedupeAgainst: "totalDebt" },
   { key: "totalLiabilities", label: "Total Liabilities", indent: 0, unit: "currency" },
   { key: "retainedEarnings", label: "Retained Earnings", indent: 1, unit: "currency" },
