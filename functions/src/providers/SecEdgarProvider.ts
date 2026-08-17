@@ -544,6 +544,27 @@ export function parseAnnualCashFlowStatements(
  * value) from those two responses, instead of the 5 independent fetches
  * the per-capability methods below would otherwise cost.
  */
+/**
+ * Ticker -> CIK overrides for filers whose SEC `company_tickers.json` entry
+ * points at an entity with no filing history.
+ *
+ * When a company reorganizes into a holding company, SEC repoints the ticker
+ * to the NEW CIK immediately, but the operating company keeps filing the
+ * 10-Ks and keeps the entire XBRL history. Verified for XOM on 2026-08-16:
+ * the mapped CIK 2115436 ("ExxonMobil Holdings Corp") has filed no 10-K at
+ * all and returns zero annual facts, while CIK 34088 ("Exxon Mobil Corp")
+ * has 45 years of Revenues and filed a 10-K on 2026-02-18. Left alone, XOM
+ * ingests as a company with no statements — no metrics, no rank, silently.
+ *
+ * Deliberately a short explicit list rather than a heuristic: guessing a
+ * predecessor by name similarity risks attaching one company's fundamentals
+ * to another, which is far worse than a missing company. `assertCikHasFilings`
+ * exists to surface new cases so they can be added here on evidence.
+ */
+export const CIK_OVERRIDES: Record<string, string> = {
+  XOM: "0000034088",
+};
+
 export class SecEdgarProvider extends FinancialDataProvider {
   readonly name = "sec_edgar";
   readonly capabilities: ProviderCapabilities = {
@@ -575,7 +596,16 @@ export class SecEdgarProvider extends FinancialDataProvider {
 
   private async cikFor(ticker: string): Promise<string | null> {
     await this.loadTickerMap();
-    return this.tickerToCik.get(ticker.toUpperCase()) ?? null;
+    const symbol = ticker.toUpperCase();
+    const override = CIK_OVERRIDES[symbol];
+    if (override) {
+      const mapped = this.tickerToCik.get(symbol);
+      if (mapped && mapped !== override) {
+        log.info(`cikFor(${symbol}): using operating-company CIK ${override} instead of SEC's mapped ${mapped}`);
+      }
+      return override;
+    }
+    return this.tickerToCik.get(symbol) ?? null;
   }
 
   private async fetchCompanyFacts(cik: string): Promise<CompanyFacts | null> {
@@ -882,7 +912,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
     const [facts, submission] = await Promise.all([this.fetchCompanyFacts(cik), this.fetchSubmission(cik)]);
     if (!facts) return null;
 
-    return {
+    const bundle = {
       ticker: ticker.toUpperCase(),
       cik,
       profile: this.buildProfile(ticker, cik, submission),
@@ -891,6 +921,18 @@ export class SecEdgarProvider extends FinancialDataProvider {
       cashFlow: this.extractCashFlowStatements(facts, periods),
       approxMarketValue: this.extractApproxMarketValue(cik, facts),
     };
+
+    // A live ticker whose CIK yields no annual statements at all is almost
+    // always SEC having repointed it at a freshly-created holding company
+    // while the operating company keeps filing (see CIK_OVERRIDES). Silently
+    // ingesting an empty company is the failure mode that hid XOM, so say so.
+    if (bundle.income.length === 0 && bundle.balance.length === 0) {
+      log.warn(
+        `getCompanyBundle(${bundle.ticker}): CIK ${cik} returned no annual statements — ` +
+          `if this ticker reorganized, the filing history may live under a predecessor CIK (see CIK_OVERRIDES)`,
+      );
+    }
+    return bundle;
   }
 
   async listUniverse(): Promise<string[]> {
