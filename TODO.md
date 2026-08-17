@@ -28,13 +28,19 @@ Running list of known open items. Not a full backlog — just things worth not f
   - **WELL and AMT report nothing under any of the three tags** (CIKs 0000766704 /
     0001053507) — probably a CIK/registrant change where the operating partnership co-files.
     Not fixable by tag precedence; needs a look at the actual submissions.
-  - **`operatingIncome` has the same shape of gap and was deliberately NOT fixed.** O, VTR,
-    WELL, AMT, SRE report no `OperatingIncomeLoss` at any date; BXP stops at FY2017, PSA at
-    FY2017. Unlike net income there is no alternative tag on the same basis — the nearest is
-    pretax income, already net of interest expense, which for a leveraged REIT/utility would
-    corrupt `ebit` (set equal to operatingIncome) and make interest coverage circular. The
-    honest route is deriving `Revenues − CostsAndExpenses` and marking it derived; that's a
-    metrics-layer decision, not an ingestion one.
+  - **`operatingIncome`: derivation TESTED AND REJECTED on evidence (2026-08-17).** The
+    previously-suggested route, `Revenues − CostsAndExpenses`, is wrong: for XOM it equals
+    pretax income EXACTLY (delta 0 in FY2024 and FY2025), because `CostsAndExpenses` already
+    nets interest expense. Adopting it would set `ebit` to pretax income universe-wide —
+    understating EBIT, inflating EV/EBIT, and making interest coverage (EBIT/interest)
+    circular. It is not even consistent across filers: for O the same subtraction lands
+    ~$192M BELOW pretax. The textbook alternative, `EBIT = pretaxIncome + interestExpense`,
+    is sound (XOM FY2025: 41,268 + 603 = 41,871) but recovers only **6 of 31** null-OI
+    non-financial companies — 13 lack pretaxIncome, 12 lack interestExpense — and would leave
+    `ebit` on two different bases across the universe. Not worth it; leaving null is honest.
+    The gap is also smaller than it appears: 24% universe-wide but 76% of it is Financials,
+    where no operating-income subtotal exists by construction and EV/EBIT is already
+    sector-gated off. Excluding Financials and Real Estate it is 9%.
   - **D&A coverage is 78% universe-wide** (Real Estate 88%, Financials 58%). The FFO metrics
     only need the REIT figure, and banks genuinely report little D&A, so this is mostly
     fine — but a filer using a tag outside
