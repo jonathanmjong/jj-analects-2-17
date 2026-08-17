@@ -4,6 +4,23 @@ Running list of known open items. Not a full backlog — just things worth not f
 
 ## Open
 
+- **The universe screen had permanently stopped (found and fixed 2026-08-16).**
+  `system/universeExpansion` latched on `status: "complete"` at cursor 10432/10432 on
+  2026-07-24 and `claimLock` refused every invocation after that, so no company could be
+  added for three weeks while `cleanupUniverse` kept removing them — the universe could only
+  shrink. It now recycles with a `cycleCount` like the other cursor jobs. Watch that
+  `cycleCount` keeps advancing; if it ever stops, the universe is silently freezing again.
+- **`grossProfit` / `totalDebt` / `costOfRevenue` tag coverage fixed (2026-08-16).** All three
+  read a single XBRL tag. Production nulls went totalDebt 51%->22%, grossProfit 58%->40%,
+  costOfRevenue 100%->42%. This mattered most for debt: `ingestPrices` treats missing debt as
+  ZERO when computing enterprise value, so EV silently omitted debt for half the universe and
+  flattered leveraged companies on every EV multiple. That `?? 0` is still there deliberately
+  (a null EV drops the company out of three rankings entirely) — revisit if the residual grows.
+- **Ticker->CIK remaps silently produce empty companies.** SEC repointed `XOM` to a holdco CIK
+  with no filings; it had no company document at all. Fixed with an explicit `CIK_OVERRIDES`
+  entry (not name-matching, which could attach one company's fundamentals to another) plus a
+  warning when a bundle returns no income AND no balance statements. Any future
+  reorganization will hit this — the warning is how you'll find out.
 - **Residual XBRL data gaps after the 2026-08-15 net-income fix.** Net income nulls went
   134/1344 (10%) → 40 (3%) by resolving `NetIncomeLoss` →
   `NetIncomeLossAvailableToCommonStockholdersBasic` → `ProfitLoss` per fiscal period. What is
@@ -24,9 +41,11 @@ Running list of known open items. Not a full backlog — just things worth not f
     `DepreciationDepletionAndAmortization`/`DepreciationAndAmortization` silently yields no FFO.
   - **Recommended but not done:** store a `netIncomeSourceTag` on `IncomeStatement` so the UI
     can flag NCI-inclusive figures and an audit can find them without re-fetching EDGAR.
-- **`npm run lint` is broken for the functions workspace** — `eslint` is not in
-  `functions/node_modules/.bin` in a fresh checkout, so the script exits 127. CI has no lint
-  step, so nothing catches it. Either add eslint as a devDependency or drop the script.
+- **`npm run lint` fixed (2026-08-16)** — oxlint is now a single root devDependency linting
+  web, functions and shared in one pass, and CI runs it. Deliberately NOT a functions
+  devDependency: Cloud Build installs `functions/` in isolation against its own standalone
+  lockfile, so putting a linter there both broke the deploy and would have shipped dev tooling
+  into the production install.
 
 - **Daily price history: abandoned as a paid/infra problem, routed around for free (2026-08-14).**
   Retried the VPC connector: the 2026-08-05 `ZONE_RESOURCE_POOL_EXHAUSTED` capacity problem is
