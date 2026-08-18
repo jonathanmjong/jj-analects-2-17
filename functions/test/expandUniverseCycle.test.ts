@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
  * could only shrink, because cleanupUniverse kept removing companies while
  * nothing could ever be added back.
  */
+const PASS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
 interface State {
   cursor: number;
   totalTickers: number;
@@ -15,12 +17,14 @@ interface State {
   qualifiedCount: number;
   status: "in_progress" | "complete";
   cycleCount?: number;
+  lastPassCompletedAt?: number;
   lockedUntil?: number;
 }
 
 function claim(state: State, now: number): State | null {
   if (state.lockedUntil && state.lockedUntil > now) return null;
   const wrapped = state.cursor >= state.totalTickers;
+  if (wrapped && now - (state.lastPassCompletedAt ?? 0) < PASS_COOLDOWN_MS) return null;
   return wrapped
     ? { ...state, cursor: 0, screenedCount: 0, qualifiedCount: 0, cycleCount: (state.cycleCount ?? 0) + 1, status: "in_progress" }
     : state;
@@ -50,6 +54,23 @@ describe("expandUniverse cursor recycling", () => {
       expect(s.cycleCount).toBe(i);
       s = { ...s, cursor: s.totalTickers }; // simulate the pass finishing again
     }
+  });
+
+  it("waits out the cooldown before re-screening, then starts the next pass", () => {
+    const now = Date.now();
+    // Re-screening back to back cost ~50k EDGAR requests/day and found nothing:
+    // cycles 2-7 in production each qualified zero companies.
+    const justFinished = { ...finished, lastPassCompletedAt: now - 60_000 };
+    expect(claim(justFinished, now), "must not immediately re-screen 10,400 tickers").toBeNull();
+    const weekOld = { ...finished, lastPassCompletedAt: now - PASS_COOLDOWN_MS - 1 };
+    expect(claim(weekOld, now)).not.toBeNull();
+    expect(claim(weekOld, now)!.cursor).toBe(0);
+  });
+
+  it("does not let the cooldown stall a pass that is still mid-list", () => {
+    const now = Date.now();
+    const mid = { ...finished, cursor: 4500, status: "in_progress" as const, lastPassCompletedAt: now - 60_000 };
+    expect(claim(mid, now), "cooldown gates new passes only, never an in-flight one").not.toBeNull();
   });
 
   it("still refuses while another invocation holds a live lock", () => {

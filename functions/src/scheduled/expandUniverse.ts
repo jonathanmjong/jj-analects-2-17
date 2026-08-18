@@ -17,6 +17,19 @@ const CONCURRENCY = 5;
 const REQUEST_STAGGER_MS = 250;
 /** How long a claimed lock is honored before being considered abandoned (crashed invocation). */
 const LOCK_DURATION_MS = 8 * 60 * 1000;
+/**
+ * Minimum gap between full passes over SEC's ~10,400 tickers.
+ *
+ * A pass costs roughly one EDGAR request per ticker and takes ~6.4 hours at
+ * 150 per 5-minute batch. Left to run back-to-back it re-screened the whole
+ * list ~4 times a day — about 50,000 requests daily — and cycles 2 through 7
+ * qualified precisely zero new companies, because the universe was already
+ * saturated. The things this screen is watching for (a new listing, a company
+ * crossing the float floor, filings becoming readable) move on the order of
+ * weeks, so weekly is generous and keeps well clear of SEC's fair-access
+ * expectations.
+ */
+const PASS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 const cursorRef = () => db.collection("system").doc("universeExpansion");
 
@@ -28,6 +41,8 @@ interface ExpansionState {
   status: "in_progress" | "complete";
   /** Increments each time the screen wraps back to the start of SEC's ticker list. */
   cycleCount?: number;
+  /** Epoch ms when the last full pass finished — gates the next one via PASS_COOLDOWN_MS. */
+  lastPassCompletedAt?: number;
   lockedUntil?: number;
 }
 
@@ -55,6 +70,10 @@ async function claimLock(totalTickers: number): Promise<ExpansionState | null> {
     // only became readable later (XOM, whose ticker SEC had repointed at a
     // holdco with no financials, was invisible to this screen for that reason).
     const wrapped = state.cursor >= totalTickers;
+    if (wrapped) {
+      const since = Date.now() - (state.lastPassCompletedAt ?? 0);
+      if (since < PASS_COOLDOWN_MS) return null; // finished recently; wait rather than re-screen the same 10,400 tickers
+    }
     const claimed: ExpansionState = wrapped
       ? { ...state, cursor: 0, screenedCount: 0, qualifiedCount: 0, cycleCount: (state.cycleCount ?? 0) + 1, status: "in_progress" }
       : state;
@@ -154,6 +173,7 @@ export const expandUniverse = onSchedule(
         screenedCount: state.screenedCount + batch.length,
         qualifiedCount: state.qualifiedCount + qualifiedThisRun,
         status: done ? "complete" : "in_progress",
+        ...(done ? { lastPassCompletedAt: Date.now() } : {}),
         lockedUntil: FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
       },
