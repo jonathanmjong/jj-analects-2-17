@@ -36,3 +36,25 @@ describe("normalizeFiscalYearEnd", () => {
     expect(normalizeFiscalYearEnd(undefined)).toBeNull();
   });
 });
+
+describe("normalizeExchanges — duplicate listings", () => {
+  it("collapses the repeated entries SEC returns for multi-security filers", () => {
+    // JPM in production: one entry per registered security (common + preferred
+    // series), all NYSE, which rendered as "NYSE, NYSE, NYSE, ..." nine times.
+    expect(normalizeExchanges(Array(9).fill("NYSE"))).toBe("NYSE");
+  });
+
+  it("keeps genuinely distinct venues, in first-seen order", () => {
+    expect(normalizeExchanges(["NYSE", "Nasdaq", "NYSE"])).toBe("NYSE, Nasdaq");
+  });
+
+  it("treats casing as the same venue and keeps the first spelling", () => {
+    expect(normalizeExchanges(["Nasdaq", "NASDAQ", "nasdaq"])).toBe("Nasdaq");
+  });
+
+  it("still returns null when nothing usable is listed", () => {
+    expect(normalizeExchanges([])).toBeNull();
+    expect(normalizeExchanges(["", "   "])).toBeNull();
+    expect(normalizeExchanges(null)).toBeNull();
+  });
+});

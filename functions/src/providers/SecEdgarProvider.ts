@@ -388,8 +388,18 @@ function nonEmpty(value: string | null | undefined): string | null {
 /** A filer can be dual-listed; EDGAR returns an array and sometimes an empty string entry. */
 export function normalizeExchanges(exchanges: string[] | null | undefined): string | null {
   if (!Array.isArray(exchanges)) return null;
-  const named = exchanges.map((e) => (typeof e === "string" ? e.trim() : "")).filter((e) => e.length > 0);
-  return named.length > 0 ? named.join(", ") : null;
+  // Deduplicated case-insensitively: SEC lists one entry per REGISTERED SECURITY,
+  // not per venue, so a filer with preferred series repeats the same exchange —
+  // JPMorgan returned nine "NYSE" entries and rendered as "NYSE, NYSE, NYSE, ...".
+  // First spelling wins so the filer's own casing is preserved.
+  const seen = new Map<string, string>();
+  for (const raw of exchanges) {
+    const name = typeof raw === "string" ? raw.trim() : "";
+    if (name.length === 0) continue;
+    const key = name.toLowerCase();
+    if (!seen.has(key)) seen.set(key, name);
+  }
+  return seen.size > 0 ? [...seen.values()].join(", ") : null;
 }
 
 /** Leap-year-permissive: Feb 29 is a legitimate fiscal year end for a filer whose FY ends then. */
