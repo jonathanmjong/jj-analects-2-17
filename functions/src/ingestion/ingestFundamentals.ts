@@ -45,6 +45,11 @@ export async function ingestFundamentalsForTicker(ticker: string): Promise<{ ok:
       description: profile.description,
       website: profile.website,
       country: profile.country,
+      exchange: profile.exchange,
+      stateOfIncorporation: profile.stateOfIncorporation,
+      fiscalYearEnd: profile.fiscalYearEnd,
+      headquarters: profile.headquarters,
+      filerCategory: profile.filerCategory,
       updatedAt: now,
     };
     if (!existing.exists) {

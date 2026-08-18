@@ -2,7 +2,7 @@ import type { BalanceSheet, CashFlowStatement, IncomeStatement } from "@proverbs
 import { log } from "../lib/logger.js";
 import { FinancialDataProvider, type CompanyProfileResult, type ProviderCapabilities } from "./FinancialDataProvider.js";
 import { sectorFromSicCode } from "./sicSectorMap.js";
-import { resolveCountry } from "./usStateCodes.js";
+import { formatHeadquarters, resolveCountry } from "./usStateCodes.js";
 
 export interface XbrlFact {
   /** Present for "duration" concepts (income/cash-flow — value covers a period); absent for "instant" ones (balance-sheet — value as of a single date). */
@@ -26,8 +26,14 @@ interface SubmissionJson {
   name?: string;
   sic?: string;
   sicDescription?: string;
+  /** MMDD, e.g. "0926". */
+  fiscalYearEnd?: string;
+  stateOfIncorporation?: string;
+  exchanges?: string[];
+  /** Filing-status classification, e.g. "Large accelerated filer". */
+  category?: string;
   addresses?: {
-    business?: { stateOrCountry?: string; stateOrCountryDescription?: string };
+    business?: { city?: string; stateOrCountry?: string; stateOrCountryDescription?: string };
   };
 }
 
@@ -374,6 +380,36 @@ export interface CompanyConceptJson {
 }
 
 /** 10-K/A restates a prior 10-K's cover page, so amendments count too — unlike annualFactsByEnd, which only ever needs originals. */
+function nonEmpty(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+/** A filer can be dual-listed; EDGAR returns an array and sometimes an empty string entry. */
+export function normalizeExchanges(exchanges: string[] | null | undefined): string | null {
+  if (!Array.isArray(exchanges)) return null;
+  const named = exchanges.map((e) => (typeof e === "string" ? e.trim() : "")).filter((e) => e.length > 0);
+  return named.length > 0 ? named.join(", ") : null;
+}
+
+/** Leap-year-permissive: Feb 29 is a legitimate fiscal year end for a filer whose FY ends then. */
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/**
+ * EDGAR's fiscalYearEnd is MMDD ("0926"). Rejected rather than passed through when it isn't a real
+ * calendar day, because the UI turns it into a month-and-day label and a malformed value would be
+ * rendered as a confidently wrong date.
+ */
+export function normalizeFiscalYearEnd(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed || !/^\d{4}$/.test(trimmed)) return null;
+  const month = Number(trimmed.slice(0, 2));
+  const day = Number(trimmed.slice(2));
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > DAYS_IN_MONTH[month - 1]) return null;
+  return trimmed;
+}
+
 const ANNUAL_FORMS = new Set(["10-K", "10-K/A"]);
 
 const FLOAT_HISTORY_MAX_YEARS = 12;
@@ -822,6 +858,9 @@ export class SecEdgarProvider extends FinancialDataProvider {
     const address = submission?.addresses?.business;
     const country = resolveCountry(address?.stateOrCountry, address?.stateOrCountryDescription);
 
+    // SEC's submissions record carries no business narrative and no website field, so these stay
+    // null here — the profile a user reads is assembled from the identity fields below plus the
+    // SIC description, never from an invented summary.
     return {
       ticker: ticker.toUpperCase(),
       companyName: submission?.name ?? ticker.toUpperCase(),
@@ -831,6 +870,11 @@ export class SecEdgarProvider extends FinancialDataProvider {
       description: null,
       website: null,
       country,
+      exchange: normalizeExchanges(submission?.exchanges),
+      stateOfIncorporation: nonEmpty(submission?.stateOfIncorporation),
+      fiscalYearEnd: normalizeFiscalYearEnd(submission?.fiscalYearEnd),
+      headquarters: formatHeadquarters(address?.city, address?.stateOrCountry, address?.stateOrCountryDescription),
+      filerCategory: nonEmpty(submission?.category),
     };
   }
 

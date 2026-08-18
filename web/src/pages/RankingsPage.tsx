@@ -12,7 +12,7 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import { Download, HelpCircle, SlidersHorizontal } from "lucide-react";
-import type { Company, MetricCategory, MetricDefinition, Sector } from "@proverbs/shared";
+import type { Company, MetricCategory, MetricDefinition, RankingWeightsConfig, Sector } from "@proverbs/shared";
 import { defaultMetricWeight, DEFAULT_RANKING_CONFIG, METRIC_CATEGORIES, SECTORS } from "@proverbs/shared";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { useAllRankings } from "../hooks/useAllRankings";
@@ -178,7 +178,30 @@ export function RankingsPage() {
   } = useCustomRankings("rankings.customConfig");
   const yearsIncluded = customConfig.yearsIncluded;
   const [metricWeightInputs, setMetricWeightInputs] = usePageState<Record<string, number>>("rankings.metricWeightInputs", {});
-  const recomputeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Weight changes dispatch on the next animation frame rather than after a
+   * 60ms debounce. That debounce dated from when a recompute cost ~250ms on the
+   * main thread and every keystroke had to be suppressed; the engine now runs
+   * in a worker off a cached normalization index at ~2.4ms median, so the
+   * debounce was waiting more than 20x longer than the work it was protecting
+   * against, and the numbers only moved once you stopped dragging. Coalescing
+   * per frame gives at most one dispatch per paint, and the worker client
+   * already supersedes anything still in flight.
+   */
+  const recomputeFrame = useRef<number | null>(null);
+  const scheduleRecompute = useCallback(
+    (nextConfig: RankingWeightsConfig) => {
+      if (recomputeFrame.current !== null) cancelAnimationFrame(recomputeFrame.current);
+      recomputeFrame.current = requestAnimationFrame(() => {
+        recomputeFrame.current = null;
+        void recompute(nextConfig);
+      });
+    },
+    [recompute],
+  );
+  useEffect(() => () => {
+    if (recomputeFrame.current !== null) cancelAnimationFrame(recomputeFrame.current);
+  }, []);
   const [globalFilter, setGlobalFilter] = usePageState("rankings.globalFilter", "");
   /** Empty set means "no filter" (all sectors/countries shown), matching the old "all" option. */
   const [sectorFilter, setSectorFilter] = usePageState<Set<Sector>>("rankings.sectorFilter", () => new Set());
@@ -277,46 +300,35 @@ export function RankingsPage() {
   function handleMetricWeightChange(metricKey: string, weight: number) {
     setMetricWeightInputs((prev) => ({ ...prev, [metricKey]: weight }));
     const nextConfig = setMetricWeight(metricKey, weight);
-    if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
-    recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 60);
+    scheduleRecompute(nextConfig);
   }
 
   function handleYearsChange(value: number) {
     const nextConfig = setYearsIncluded(value as 1 | 2 | 3 | 4 | 5);
-    if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
-    recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 60);
+    scheduleRecompute(nextConfig);
   }
 
   function handleResetMetricWeights() {
     setMetricWeightInputs({});
     const nextConfig = resetMetricWeights();
-    if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
-    void recompute(nextConfig);
+    scheduleRecompute(nextConfig);
   }
 
   /** Slider value is a 0-100 percent; stored/sent as a 0-1 weight, renormalized against the other categories server-side (doesn't need to sum to 100). */
   function handleCategoryWeightChange(category: MetricCategory, percent: number) {
     const nextConfig = setCategoryWeight(category, percent / 100);
-    if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
-    recomputeTimer.current = setTimeout(() => void recompute(nextConfig), 60);
+    scheduleRecompute(nextConfig);
   }
 
   function handleResetCategoryWeights() {
     const nextConfig = { ...customConfig, categoryWeights: DEFAULT_RANKING_CONFIG.categoryWeights };
     setConfig(nextConfig);
-    if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
-    void recompute(nextConfig);
+    scheduleRecompute(nextConfig);
   }
 
   const categoryWeightsActive = METRIC_CATEGORIES.some(
     (c) => customConfig.categoryWeights[c] !== DEFAULT_RANKING_CONFIG.categoryWeights[c],
   );
-
-  useEffect(() => {
-    return () => {
-      if (recomputeTimer.current) clearTimeout(recomputeTimer.current);
-    };
-  }, []);
 
   const metricWeightsActive = Object.keys(customConfig.metricWeights ?? {}).length > 0;
 

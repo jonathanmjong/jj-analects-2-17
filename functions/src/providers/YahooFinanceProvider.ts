@@ -170,6 +170,13 @@ export class YahooFinanceProvider extends FinancialDataProvider {
       description: (profile?.longBusinessSummary as string) ?? null,
       website: (profile?.website as string) ?? null,
       country: (profile?.country as string) ?? null,
+      // assetProfile carries none of the SEC filer-identity fields; only the EDGAR provider
+      // populates these, and a company ingested from Yahoo alone simply omits those rows.
+      exchange: null,
+      stateOfIncorporation: null,
+      fiscalYearEnd: null,
+      headquarters: null,
+      filerCategory: null,
     };
   }
 

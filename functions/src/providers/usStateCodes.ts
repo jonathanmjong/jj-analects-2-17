@@ -23,3 +23,37 @@ export function resolveCountry(stateOrCountry: string | null | undefined, stateO
   if (US_STATE_AND_TERRITORY_CODES.has(stateOrCountry)) return "United States";
   return stateOrCountryDescription ?? stateOrCountry;
 }
+
+/**
+ * EDGAR reports the business address city in caps ("CUPERTINO"), which reads as shouting next to
+ * the rest of the profile. Title-cases each hyphen/space-separated part, leaving already-mixed-case
+ * input alone so a correctly-cased "McLean" survives.
+ */
+function titleCaseCity(city: string): string {
+  if (city !== city.toUpperCase()) return city;
+  return city
+    .toLowerCase()
+    .replace(/(^|[\s\-'.])([a-z])/g, (_m, sep: string, ch: string) => sep + ch.toUpperCase());
+}
+
+/**
+ * Assembles a display headquarters from EDGAR's business address: "Cupertino, CA" for domestic
+ * filers (where stateOrCountryDescription just echoes the code) and "Hamilton, Bermuda" for foreign
+ * ones (where it spells the country out). Returns null when there is no city to anchor it, and the
+ * bare region when the city is missing but the region is not.
+ */
+export function formatHeadquarters(
+  city: string | null | undefined,
+  stateOrCountry: string | null | undefined,
+  stateOrCountryDescription: string | null | undefined,
+): string | null {
+  const region = stateOrCountry
+    ? US_STATE_AND_TERRITORY_CODES.has(stateOrCountry)
+      ? stateOrCountry
+      : (stateOrCountryDescription ?? stateOrCountry)
+    : null;
+  const trimmedCity = city?.trim();
+  if (!trimmedCity) return region;
+  const named = titleCaseCity(trimmedCity);
+  return region ? `${named}, ${region}` : named;
+}

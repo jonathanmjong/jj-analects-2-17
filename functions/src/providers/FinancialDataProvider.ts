@@ -9,6 +9,14 @@ export interface CompanyProfileResult {
   description: string | null;
   website: string | null;
   country: string | null;
+  /** Listing venue(s), comma-joined when a filer names more than one. */
+  exchange: string | null;
+  stateOfIncorporation: string | null;
+  /** MMDD as the source reports it ("0926"), not a formatted label. */
+  fiscalYearEnd: string | null;
+  /** Business address as "Cupertino, CA" / "Hamilton, Bermuda". */
+  headquarters: string | null;
+  filerCategory: string | null;
 }
 
 export interface ProviderCapabilities {

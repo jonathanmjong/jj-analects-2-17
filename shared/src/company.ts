@@ -38,6 +38,20 @@ export interface Company {
   description: string | null;
   website: string | null;
   country: string | null;
+  /**
+   * Filer identity read off the SEC submissions record. All optional, not `| null`: every company
+   * document written before 2026-08 lacks these keys entirely and is only backfilled when the
+   * fundamentals job next re-ingests that ticker, so consumers must treat `undefined` and `null`
+   * identically and render nothing rather than a placeholder.
+   */
+  exchange?: string | null;
+  stateOfIncorporation?: string | null;
+  /** MMDD exactly as EDGAR reports it ("0926"). Stored raw; formatted for display in the UI. */
+  fiscalYearEnd?: string | null;
+  /** Business address as "Cupertino, CA" (US) or "Hamilton, Bermuda" (foreign). */
+  headquarters?: string | null;
+  /** EDGAR's filing-status classification, e.g. "Large accelerated filer". */
+  filerCategory?: string | null;
   isSp500: boolean;
   marketCapTier: "mid" | "large" | null;
   /** Denormalized for fast list/table reads without a subcollection join. */

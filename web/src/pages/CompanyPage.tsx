@@ -17,6 +17,7 @@ import { IncomeWaterfall } from "../components/charts/IncomeWaterfall";
 import { PriceHistoryChart } from "../components/charts/PriceHistoryChart";
 import { SentimentSourcePicker } from "../components/sentiment/SentimentSourcePicker";
 import { CapitalAllocationPanel } from "../components/company/CapitalAllocationPanel";
+import { CompanyOverviewPanel } from "../components/company/CompanyOverviewPanel";
 import { ForensicPanel } from "../components/company/ForensicPanel";
 import { GrowthRoicChart } from "../components/company/GrowthRoicChart";
 import { NormalizedEarningsPanel } from "../components/company/NormalizedEarningsPanel";
@@ -173,6 +174,14 @@ export function CompanyPage() {
           </div>
         </div>
       </div>
+
+      <CompanyOverviewPanel
+        company={company}
+        ranking={ranking}
+        income={data.income}
+        balance={data.balance}
+        cashFlow={data.cashFlow}
+      />
 
       <Card>
         <CardHeader>
