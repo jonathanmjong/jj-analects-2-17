@@ -4,7 +4,14 @@ import { log } from "../lib/logger.js";
 import { SecEdgarProvider } from "../providers/SecEdgarProvider.js";
 import { computeMetricsForCompany } from "../metrics/computeMetrics.js";
 
-const STATEMENT_YEARS = 5;
+/**
+ * EDGAR carries 15-45 years for most filers and the parse cost is the same
+ * companyfacts fetch either way, so the only reason this was 5 is that the
+ * scoring engine never looks past MAX_PERIODS (6). The extra years are for
+ * reading the statements, not for metrics: growth horizons still cap at 5 and
+ * nothing in the registry sees beyond the sixth period.
+ */
+const STATEMENT_YEARS = 10;
 
 // getCompanyBundle() is SEC-EDGAR-specific (not part of the swappable
 // FinancialDataProvider interface) — it exists specifically to fetch

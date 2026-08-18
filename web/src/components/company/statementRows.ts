@@ -72,6 +72,7 @@ export const BALANCE_ROWS: RowConfig[] = [
 
 export const CASH_FLOW_ROWS: RowConfig[] = [
   { key: "operatingCashFlow", label: "Operating Cash Flow", indent: 0, unit: "currency" },
+  { key: "depreciationAndAmortization", label: "Depreciation & Amortization", indent: 1, unit: "currency" },
   { key: "capitalExpenditures", label: "Capital Expenditures", indent: 1, unit: "currency" },
   { key: "freeCashFlow", label: "Free Cash Flow", indent: 0, unit: "currency" },
   { key: "dividendsPaid", label: "Dividends Paid", indent: 1, unit: "currency" },
@@ -188,4 +189,31 @@ export function sparklinePoints(cells: StatementCell[], width: number, height: n
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(" ");
+}
+
+export interface StatementGroup {
+  /** The indent-0 subtotal this group is headed by, or null for components that appear before any. */
+  parent: StatementRow | null;
+  children: StatementRow[];
+}
+
+/**
+ * Folds the flat row list into subtotal groups using the `indent` each config
+ * already carries: an indent-0 row heads a group and the indent-1 rows after it
+ * are its components. Rendering every line at once made the statements a wall of
+ * 12-18 numbers where the subtotals — the figures most people actually read —
+ * had no visual priority. Components with no preceding subtotal (possible if a
+ * statement's first rows are all dropped as empty) become their own headless
+ * group rather than being silently discarded.
+ */
+export function groupStatementRows(rows: StatementRow[]): StatementGroup[] {
+  const groups: StatementGroup[] = [];
+  for (const row of rows) {
+    if (row.indent === 0 || groups.length === 0) {
+      groups.push({ parent: row.indent === 0 ? row : null, children: row.indent === 0 ? [] : [row] });
+      continue;
+    }
+    groups[groups.length - 1].children.push(row);
+  }
+  return groups;
 }

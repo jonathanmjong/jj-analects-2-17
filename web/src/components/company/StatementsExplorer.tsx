@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import type { BalanceSheet, CashFlowStatement, IncomeStatement } from "@proverbs/shared";
 import { HistoryLineChart } from "../charts/HistoryLineChart";
 import { cn, formatPercent } from "../../lib/utils";
 import {
   buildStatementRows,
+  groupStatementRows,
   computeYoyChange,
   fiscalYearLabel,
   formatStatementValue,
@@ -109,6 +111,104 @@ export function StatementsExplorer({
   );
   const years = useMemo(() => statementYears(periods), [periods]);
   const selectedRow = rows.find((r) => r.key === selectedKey) ?? null;
+  const groups = useMemo(() => groupStatementRows(rows), [rows]);
+
+  /**
+   * Subtotals carry their components behind a disclosure rather than every line
+   * rendering at once: a statement is 12-18 rows and the subtotals are what most
+   * people actually read. Collapsed by default, and reset when the tab changes so
+   * a statement never opens half-expanded from a previous one.
+   */
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const allOpen = groups.every((g) => g.parent === null || g.children.length === 0 || openGroups.has(g.parent.key));
+  useEffect(() => setOpenGroups(new Set()), [kind]);
+
+  function toggleGroup(key: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setOpenGroups(allOpen ? new Set() : new Set(groups.flatMap((g) => (g.parent && g.children.length ? [g.parent.key] : []))));
+  }
+
+  function renderRow(row: StatementRow, childCount: number, isOpen: boolean) {
+    const selected = row.key === selectedKey;
+    return (
+      <tr
+        key={row.key}
+        onClick={() => toggleRow(row.key)}
+        className={cn(
+          "group cursor-pointer border-t border-border transition-colors",
+          selected ? "bg-accent/10" : "hover:bg-surface-hover",
+        )}
+      >
+        <td
+          className={cn(
+            "sticky left-0 z-10 py-2 pr-4",
+            selected ? "bg-surface-hover shadow-[inset_2px_0_0_0_var(--color-accent)]" : "bg-surface group-hover:bg-surface-hover",
+          )}
+        >
+          <div className="flex items-center gap-1.5">
+            {childCount > 0 ? (
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                aria-label={`${isOpen ? "Hide" : "Show"} the ${childCount} line${childCount === 1 ? "" : "s"} within ${row.label}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleGroup(row.key);
+                }}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-surface hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", isOpen && "rotate-90")} />
+              </button>
+            ) : (
+              <span className="h-5 w-5 shrink-0" aria-hidden="true" />
+            )}
+            {/* Row click charts the line; the chevron above is a separate control so
+                expanding a subtotal never silently swaps what the chart is showing. */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleRow(row.key);
+              }}
+              className="flex w-full items-center justify-between gap-3 rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            >
+              <span
+                className={cn(
+                  row.indent === 1 && "pl-3",
+                  row.indent === 0 ? "font-medium" : "text-muted-foreground",
+                  selected && "text-accent",
+                )}
+              >
+                {row.label}
+              </span>
+              <RowTrendCue row={row} selected={selected} />
+            </button>
+          </div>
+        </td>
+        {row.cells.map((cell) => (
+          <td
+            key={cell.fiscalYear}
+            className={cn(
+              "py-2 pl-4 text-right tabular-nums",
+              cell.value === null && "text-muted-foreground",
+              cell.value !== null && cell.value < 0 && "text-negative",
+            )}
+          >
+            {formatStatementValue(cell.value, row.unit)}
+          </td>
+        ))}
+      </tr>
+    );
+  }
+
 
   function selectTab(next: StatementKind) {
     setKind(next);
@@ -137,7 +237,18 @@ export function StatementsExplorer({
             </button>
           ))}
         </div>
-        <span className="text-xs text-muted-foreground">Click any line to chart its history</span>
+        <div className="flex items-center gap-3">
+          {groups.some((g) => g.parent && g.children.length > 0) && (
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            >
+              {allOpen ? "Collapse all" : "Expand all"}
+            </button>
+          )}
+          <span className="text-xs text-muted-foreground">Click any line to chart its history</span>
+        </div>
       </div>
 
       {rows.length === 0 ? (
@@ -157,61 +268,15 @@ export function StatementsExplorer({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
-                  const selected = row.key === selectedKey;
+                {groups.map((group, groupIndex) => {
+                  const parent = group.parent;
+                  const groupKey = parent?.key ?? `headless-${groupIndex}`;
+                  const isOpen = parent === null || openGroups.has(parent.key);
                   return (
-                    <tr
-                      key={row.key}
-                      onClick={() => toggleRow(row.key)}
-                      className={cn(
-                        "group cursor-pointer border-t border-border transition-colors",
-                        selected ? "bg-accent/10" : "hover:bg-surface-hover",
-                      )}
-                    >
-                      <td
-                        className={cn(
-                          "sticky left-0 z-10 py-2 pr-4",
-                          selected
-                            ? "bg-surface-hover shadow-[inset_2px_0_0_0_var(--color-accent)]"
-                            : "bg-surface group-hover:bg-surface-hover",
-                        )}
-                      >
-                        {/* The whole row is clickable for pointer users, but the affordance is a real
-                            button so keyboard and screen-reader users get the same interaction. */}
-                        <button
-                          type="button"
-                          aria-expanded={selected}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleRow(row.key);
-                          }}
-                          className="flex w-full items-center justify-between gap-3 rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                        >
-                          <span
-                            className={cn(
-                              row.indent === 1 && "pl-3",
-                              row.indent === 0 ? "font-medium" : "text-muted-foreground",
-                              selected && "text-accent",
-                            )}
-                          >
-                            {row.label}
-                          </span>
-                          <RowTrendCue row={row} selected={selected} />
-                        </button>
-                      </td>
-                      {row.cells.map((cell) => (
-                        <td
-                          key={cell.fiscalYear}
-                          className={cn(
-                            "py-2 pl-4 text-right tabular-nums",
-                            cell.value === null && "text-muted-foreground",
-                            cell.value !== null && cell.value < 0 && "text-negative",
-                          )}
-                        >
-                          {formatStatementValue(cell.value, row.unit)}
-                        </td>
-                      ))}
-                    </tr>
+                    <Fragment key={groupKey}>
+                      {parent && renderRow(parent, group.children.length, isOpen)}
+                      {isOpen && group.children.map((child) => renderRow(child, 0, false))}
+                    </Fragment>
                   );
                 })}
               </tbody>

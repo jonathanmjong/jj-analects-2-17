@@ -1,16 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  BALANCE_ROWS,
-  buildStatementRows,
-  computeYoyChange,
-  fiscalYearLabel,
-  formatStatementValue,
-  INCOME_ROWS,
-  rowTrend,
-  sparklinePoints,
-  statementYears,
-  type StatementPeriod,
-} from "./statementRows";
+import { BALANCE_ROWS, buildStatementRows, computeYoyChange, fiscalYearLabel, formatStatementValue, INCOME_ROWS, rowTrend, sparklinePoints, statementYears, type StatementPeriod, groupStatementRows, type StatementRow } from "./statementRows";
 
 function incomePeriod(fiscalYear: number, fields: Record<string, number | null>): StatementPeriod {
   return { fiscalYear, ...fields } as StatementPeriod;
@@ -211,5 +200,43 @@ describe("sparklinePoints", () => {
 
   it("returns null when fewer than two years have data", () => {
     expect(sparklinePoints([{ fiscalYear: 2024, value: 5 }], 40, 10)).toBeNull();
+  });
+});
+
+describe("groupStatementRows", () => {
+  const row = (key: string, indent: 0 | 1): StatementRow =>
+    ({ key, label: key, indent, unit: "currency", cells: [{ fiscalYear: 2025, value: 1 }] }) as StatementRow;
+
+  it("heads each group with its subtotal and nests the components beneath", () => {
+    const groups = groupStatementRows([
+      row("revenue", 0),
+      row("costOfRevenue", 1),
+      row("grossProfit", 0),
+      row("researchAndDevelopment", 1),
+    ]);
+    expect(groups.map((g) => g.parent?.key)).toEqual(["revenue", "grossProfit"]);
+    expect(groups[0].children.map((c) => c.key)).toEqual(["costOfRevenue"]);
+    expect(groups[1].children.map((c) => c.key)).toEqual(["researchAndDevelopment"]);
+  });
+
+  it("keeps a subtotal that has no components", () => {
+    const groups = groupStatementRows([row("revenue", 0), row("netIncome", 0)]);
+    expect(groups).toHaveLength(2);
+    expect(groups.every((g) => g.children.length === 0)).toBe(true);
+  });
+
+  it("does not drop components that appear before any subtotal", () => {
+    // Reachable when a statement's leading subtotal rows are all-null and dropped.
+    const groups = groupStatementRows([row("cashAndEquivalents", 1), row("totalAssets", 0)]);
+    expect(groups[0].parent).toBeNull();
+    expect(groups[0].children.map((c) => c.key)).toEqual(["cashAndEquivalents"]);
+    expect(groups[1].parent?.key).toBe("totalAssets");
+  });
+
+  it("loses no rows overall", () => {
+    const rows = [row("a", 0), row("b", 1), row("c", 1), row("d", 0), row("e", 1)];
+    const groups = groupStatementRows(rows);
+    const flattened = groups.flatMap((g) => (g.parent ? [g.parent, ...g.children] : g.children));
+    expect(flattened.map((r) => r.key)).toEqual(["a", "b", "c", "d", "e"]);
   });
 });
