@@ -1,6 +1,7 @@
 import type { MetricCalculator } from "../types.js";
 import { coefficientOfVariation, safeDiv } from "../util.js";
 import { assetTurnoverOf, currentRatioOf, grossMarginOf, longTermLeverageOf, operatingMarginOf, roaOf } from "../periodMath.js";
+import { computeNormalizedEarnings } from "@proverbs/shared";
 
 /** (Net Income - Operating Cash Flow) / Total Assets. Lower (or negative) is higher quality. */
 export const accrualRatio: MetricCalculator = (i) => {
@@ -116,4 +117,19 @@ export const piotroskiFScore: MetricCalculator = (i) => {
 
   if (countable < 6) return null;
   return score;
+};
+
+/**
+ * Latest annual earnings as a multiple of their own mid-cycle average — the
+ * peak-cyclical tell. A reading well above 1 says the trailing P/E that makes
+ * this company look cheap rests on earnings that are currently above trend.
+ *
+ * Suppressed when the latest year is a loss: the denominator is guarded
+ * positive but the numerator is not, so under `direction: "asc"` (lower is
+ * better) the deepest loss would otherwise rank best in the entire universe.
+ */
+export const earningsVsNormalized: MetricCalculator = (i) => {
+  const report = computeNormalizedEarnings(i.valuationHistory, { currentMarketCap: i.marketCap });
+  if (report.latestEarnings === null || report.latestEarnings < 0) return null;
+  return report.earningsVsNormalized;
 };

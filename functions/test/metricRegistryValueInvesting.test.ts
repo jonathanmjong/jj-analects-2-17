@@ -216,6 +216,8 @@ describe("metric registry — direction matches value-investing logic, not just 
   // not just copied from whatever the registry currently says. See the file-level doc comment
   // for the one real mismatch this caught (rnd_to_revenue).
   const EXPECTED_DIRECTION: Record<string, "asc" | "desc"> = {
+    cape_ratio: "asc", // price over mid-cycle earnings — cheaper is better, same as every other multiple
+    earnings_vs_normalized: "asc", // latest running BELOW its own trend is the buying opportunity; above trend is the peak-cyclical warning
     // Valuation: cheaper (lower multiple / higher yield) is better.
     ev_fcf: "asc",
     ev_ebit: "asc",

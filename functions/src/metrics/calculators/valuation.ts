@@ -1,5 +1,6 @@
 import type { MetricCalculator } from "../types.js";
 import { safeDiv } from "../util.js";
+import { computeNormalizedEarnings } from "@proverbs/shared";
 
 export const evToFcf: MetricCalculator = (i) => safeDiv(i.enterpriseValue, i.current.cashFlow.freeCashFlow);
 export const evToEbit: MetricCalculator = (i) => safeDiv(i.enterpriseValue, i.current.income.ebit);
@@ -47,4 +48,19 @@ export const shareholderYield: MetricCalculator = (i) => {
   if (i.marketCap === null || i.marketCap === 0) return null;
   const returned = Math.abs(dividendsPaid ?? 0) + Math.abs(stockBuybacks ?? 0) - Math.abs(stockIssuance ?? 0);
   return returned / i.marketCap;
+};
+
+/**
+ * Price against mid-cycle earnings instead of the last twelve months, so a
+ * cyclical at peak margins stops screening cheap. Uses valuationHistory (~10
+ * years) rather than `series`, which holds 5-6 — shorter than a business
+ * cycle, and an average of one expansion normalizes nothing.
+ *
+ * Nominal, not CPI-deflated: older years count in smaller dollars, so the
+ * average is biased low and this multiple correspondingly high. Disclosed in
+ * the metric description and in the company panel.
+ */
+export const capeRatio: MetricCalculator = (i) => {
+  const report = computeNormalizedEarnings(i.valuationHistory, { currentMarketCap: i.marketCap });
+  return report.capeRatio;
 };

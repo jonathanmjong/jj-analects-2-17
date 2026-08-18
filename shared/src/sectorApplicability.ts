@@ -94,8 +94,8 @@ export const SECTOR_INAPPLICABLE_METRICS: Record<string, InapplicableMetricGroup
   "Real Estate": [
     {
       reason:
-        "reported earnings are dominated by property depreciation, a non-cash charge on assets that often appreciate — this is why the industry reports FFO instead",
-      metricKeys: ["pe_ttm"],
+        "reported earnings are dominated by property depreciation, a non-cash charge on assets that often appreciate — this is why the industry reports FFO instead. Averaging over a cycle does not rescue these: the distortion is structural rather than cyclical, so a 10-year mean entrenches it ten years deep, and in a latest-versus-average ratio subtracting a large near-constant from both legs amplifies the deviation instead of cancelling it. Normalized FFO would be the right construct; valuationHistory carries no D&A line to build it from",
+      metricKeys: ["pe_ttm", "cape_ratio", "earnings_vs_normalized"],
     },
     {
       reason: "a property portfolio has no inventory or trade-receivable cycle to turn over",

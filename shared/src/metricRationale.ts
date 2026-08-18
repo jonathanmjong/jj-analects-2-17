@@ -136,6 +136,16 @@ export const METRIC_RATIONALE: Record<string, MetricRationaleEntry> = {
     rationale:
       "How much free cash a company generates relative to its price — a direct \"return\" investors are effectively buying. Free cash flow is harder to manipulate than reported earnings, making this one of the more trusted value signals.",
   },
+  cape_ratio: {
+    verdict: "core",
+    rationale:
+      "Price against mid-cycle earnings rather than the last twelve months, which is the single best defence against the peak-cyclical trap: a miner or a homebuilder at the top of its cycle screens cheapest on trailing P/E precisely when it is most expensive. Graham prescribed a seven-to-ten year average for this reason. Core because it answers the same question as P/E while being far harder to fool, and it draws on ~10 years of history where the ordinary statements carry five — shorter than a US business cycle, so a five-year average can sit inside one expansion and normalise nothing. Caveat carried in the description: this is a NOMINAL average, not Shiller CAPE — there is no CPI series here, so older years count in smaller dollars, biasing the average low and this multiple high.",
+  },
+  earnings_vs_normalized: {
+    verdict: "caveat",
+    rationale:
+      "Latest annual earnings as a multiple of their own mid-cycle average — the tell for WHY something screens cheap. A reading well above 1 says the trailing multiple rests on earnings currently above trend. Lower is treated as better because being judged on trough earnings is where a value investor wants to be buying, but this is deliberately only a caveat weight: it equally penalises a genuine compounder whose latest year is legitimately its best ever, which is true of every good business. Read it as context for the valuation metrics, not as a verdict on quality. Suppressed entirely in a loss year, where the ratio is not interpretable.",
+  },
   ffo_yield: {
     verdict: "supporting",
     rationale:

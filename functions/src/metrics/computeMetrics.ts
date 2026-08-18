@@ -1,9 +1,11 @@
-import type { BalanceSheet, CashFlowStatement, IncomeStatement, MetricScore, MomentumSnapshot } from "@proverbs/shared";
+import type { BalanceSheet, CashFlowStatement, IncomeStatement, MetricScore, MomentumSnapshot, ValuationHistoryEntry } from "@proverbs/shared";
 import { collections } from "../lib/firestore.js";
 import type { MetricInput, PeriodFinancials } from "./types.js";
 import { METRIC_CALCULATORS, METRIC_DEFINITIONS } from "./definitions.js";
 
 const MAX_PERIODS = 6; // need N+1 statements to compute an N-year CAGR, and we cap growth horizons at 5
+/** Cyclically-adjusted metrics want ~10 years; valuationHistory stores up to 12. */
+const VALUATION_HISTORY_PERIODS = 12;
 
 /**
  * Recomputes every enabled metric for every available fiscal year of one
@@ -21,12 +23,16 @@ const MAX_PERIODS = 6; // need N+1 statements to compute an N-year CAGR, and we 
 export async function computeMetricsForCompany(ticker: string): Promise<void> {
   const symbol = ticker.toUpperCase();
 
-  const [incomeSnap, balanceSnap, cashFlowSnap, companySnap] = await Promise.all([
+  const [incomeSnap, balanceSnap, cashFlowSnap, companySnap, valuationHistorySnap] = await Promise.all([
     collections.incomeStatements(symbol).orderBy("fiscalYear", "desc").limit(MAX_PERIODS).get(),
     collections.balanceSheets(symbol).orderBy("fiscalYear", "desc").limit(MAX_PERIODS).get(),
     collections.cashFlowStatements(symbol).orderBy("fiscalYear", "desc").limit(MAX_PERIODS).get(),
     collections.company(symbol).get(),
+    // Deeper than MAX_PERIODS on purpose: 5-6 years is shorter than a business
+    // cycle, so cyclically-adjusted metrics would average peaks together.
+    collections.valuationHistory(symbol).orderBy("fiscalYear", "desc").limit(VALUATION_HISTORY_PERIODS).get(),
   ]);
+  const valuationHistoryAll = valuationHistorySnap.docs.map((d) => d.data() as ValuationHistoryEntry);
 
   const byYear = <T extends { fiscalYear: number }>(snap: FirebaseFirestore.QuerySnapshot): Map<number, T> =>
     new Map(snap.docs.map((d) => [((d.data() as T).fiscalYear), d.data() as T]));
@@ -83,6 +89,10 @@ export async function computeMetricsForCompany(ticker: string): Promise<void> {
       sharePrice: latest?.sharePrice ?? null,
       sharesOutstanding,
       momentum,
+      // Truncated to end at this period's fiscal year, exactly as `series` is.
+      // Without it every period row would receive the identical figure and the
+      // ranking engine's year weighting would average five copies of one number.
+      valuationHistory: valuationHistoryAll.filter((v) => v.fiscalYear <= series[periodIndex].income.fiscalYear),
     };
 
     const scores: Record<string, MetricScore> = {};
