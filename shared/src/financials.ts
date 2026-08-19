@@ -77,6 +77,18 @@ export interface CashFlowStatement extends StatementPeriodMeta {
    * null identically (`?? null`), never assume a number is present.
    */
   depreciationAndAmortization?: number | null;
+  /**
+   * Share-based compensation, as reported on the cash flow statement (it is a non-cash add-back
+   * to operating cash flow, which is where filers present it). Optional for exactly the reason
+   * `depreciationAndAmortization` is — statements written before this field existed (2026-08)
+   * lack the key entirely, so consumers must treat undefined and null identically (`?? null`).
+   *
+   * Null is a real answer, not a gap to fill with zero: some filers never tag the concept at all
+   * (verified on EDGAR — Exxon Mobil, CIK 0000034088, reports it under neither candidate tag in
+   * any year), and reading that as "$0 of stock compensation" would rank a filer with no
+   * disclosure as the most shareholder-friendly in the universe.
+   */
+  shareBasedCompensation?: number | null;
   freeCashFlow: number | null;
   dividendsPaid: number | null;
   stockBuybacks: number | null;

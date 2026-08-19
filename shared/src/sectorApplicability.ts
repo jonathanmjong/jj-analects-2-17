@@ -49,6 +49,12 @@ export const SECTOR_INAPPLICABLE_METRICS: Record<string, InapplicableMetricGroup
         "cash_conversion_ratio",
         "ocf_margin",
         "capex_to_revenue",
+        // sbc_to_fcf only — its denominator is the free cash flow this group says does not exist
+        // for a bank. sbc_to_revenue deliberately stays APPLICABLE here: stock compensation is a
+        // real cost for a bank like any other employer (JPM reports $3.6bn for FY2025), revenue
+        // is a line banks do report, and excluding it would hide a cost the sector is known for
+        // rather than avoid a meaningless number.
+        "sbc_to_fcf",
       ],
     },
     {

@@ -92,6 +92,11 @@ describe("metric registry — negativeIsBad correctness", () => {
     // reach the ranker — the flag is here so it stays impossible to rank a negative-FFO REIT as
     // the cheapest one if that guard is ever loosened.
     "price_to_ffo",
+    // Same defensive posture as price_to_ffo: the calculator suppresses zero/negative free cash
+    // flow outright, so a negative ratio can't reach the ranker today. The flag keeps it
+    // impossible for a cash-burning company to rank as the LEAST stock-compensated one in the
+    // universe if that guard is ever loosened.
+    "sbc_to_fcf",
   ]);
 
   // Metrics where "asc" (lower raw value is better) genuinely includes negative as the GOOD
@@ -284,6 +289,12 @@ describe("metric registry — direction matches value-investing logic, not just 
     revenue_volatility: "asc",
     eps_volatility: "asc",
     piotroski_f_score: "desc",
+    // Share-based compensation: an expense, so less of it per dollar of revenue and per dollar of
+    // free cash flow is better — the same direction as every other cost-intensity measure here
+    // (capex_to_revenue, rnd_to_revenue). Reading these "desc" would reward paying employees in
+    // ownership, which is the dilution the capitalAllocation category already scores against.
+    sbc_to_revenue: "asc",
+    sbc_to_fcf: "asc",
     // Balance-sheet expansion signals: both are "asc" on purpose, which is the entire point of
     // adding them. Fast asset growth (Cooper/Gulen/Schill's investment factor) and a high stock
     // of net operating assets (Hirshleifer et al.'s balance-sheet bloat) have both historically

@@ -303,6 +303,16 @@ export const METRIC_RATIONALE: Record<string, MetricRationaleEntry> = {
     rationale: "Lower volatility suggests a more predictable, forecastable business (Buffett's stated preference), but can also just mean a mature, slow-growth company — read alongside growth metrics, not standalone.",
   },
   eps_volatility: { verdict: "caveat", rationale: "Same idea as revenue volatility, but EPS is also affected by share-count and leverage changes, so it's a noisier signal of the underlying business." },
+  sbc_to_revenue: {
+    verdict: "supporting",
+    rationale:
+      "Share-based compensation is a real expense settled in ownership rather than cash, and it is the line \"adjusted\" earnings most often exclude — this puts a size on it. It is the cost side of the fact Share Count Change already reports as an outcome: dilution tells you the ownership you gave up, this tells you what it bought. Supporting rather than core for two honest reasons: the level is structurally industry-dependent (a software company paying 15% of revenue in stock and a retailer paying 1% are not being compared on management quality), and a low reading can simply mean the company pays cash instead, which is already in its margins. It measures a magnitude, not whether the compensation was deserved.",
+  },
+  sbc_to_fcf: {
+    verdict: "caveat",
+    rationale:
+      "The more pointed of the two share-based-compensation measures and the more fragile one, which is why it is weighted lightest. Pointed because free cash flow is inflated by exactly this number — SBC is added back to operating cash flow as non-cash, so a high reading means the FCF yield elsewhere on this page was partly funded by issuing stock, not by earning cash. Fragile because the denominator has to be suppressed whenever free cash flow is zero or negative, which removes precisely the cash-burning companies where paying employees in stock matters most, and because a small positive FCF makes the ratio explode. Read it as evidence about the quality of a company's reported cash flow, not as a ranking of management.",
+  },
   piotroski_f_score: {
     verdict: "core",
     rationale:

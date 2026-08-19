@@ -539,6 +539,39 @@ export function parseAnnualFundamentalsHistory(
 export const DEPRECIATION_AND_AMORTIZATION_TAGS = ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization"];
 
 /**
+ * Share-based compensation, in STRICT per-period precedence order (annualSeriesWithFallback, not
+ * the plain annualSeries merge D&A uses above) — because these two tags are NOT synonyms, and
+ * within one filing every tag carries the same `filed` date, so a merge would let array order
+ * decide which basis a company lands on. Exactly the failure mode documented on
+ * annualFactsByEndWithFallback.
+ *
+ * 1. `ShareBasedCompensation` — the cash flow statement's OWN non-cash add-back line, i.e. the
+ *    figure that actually reconciles net income to operating cash flow. Since both metrics built
+ *    on this field measure SBC against revenue and against free cash flow, the number that
+ *    inflates the cash flow being measured is the correct one to measure with.
+ * 2. `AllocatedShareBasedCompensationExpense` — the compensation NOTE's total allocated across
+ *    expense lines. Related, but a different figure: it can include amounts capitalized rather
+ *    than expensed through the cash flow add-back, and filers often present it rounded.
+ *
+ * Verified live on EDGAR (2026-08). Where a filer reports both, they frequently agree exactly
+ * (AAPL: identical in all 14 overlapping periods; IBM's last three years byte-identical), but
+ * they materially disagree often enough that the order matters: across a 10-filer sample, 31 of
+ * 115 overlapping periods differed and 20 differed by more than 2% — GOOGL FY2025 is
+ * `ShareBasedCompensation` $24.953B against `AllocatedShareBasedCompensationExpense` $27.1B
+ * (+8.6%), JNJ FY2023 $1.138B against $1.028B (-9.7%), IBM FY2020 $937M against $873M (-6.8%),
+ * and Realty Income's note figure is simply the cash flow figure rounded to $0.1M ($4.700M vs
+ * $4.726M for FY2009). All of those pairs share one `filed` date, so nothing but this list's
+ * order separates them.
+ *
+ * The fallback earns its place rather than merely padding: MSFT tags `ShareBasedCompensation`
+ * for 12 annual periods but `AllocatedShareBasedCompensationExpense` for 19, and WMT tags ONLY
+ * the fallback (16 periods, zero under the primary) — without it Walmart would have no SBC at
+ * all. JPM is the mirror image (19 periods under the primary, none under the fallback), and XOM
+ * has neither, which stays null by design.
+ */
+export const SHARE_BASED_COMPENSATION_TAGS = ["ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"];
+
+/**
  * Pure parse of a companyfacts response into annual cash flow statements. Exported (rather than
  * living only as a private method) so the tag-merge behavior above is testable without HTTP —
  * same convention as parsePublicFloatHistory / parseAnnualFundamentalsHistory.
@@ -554,6 +587,7 @@ export function parseAnnualCashFlowStatements(
   const buybacks = annualSeries(facts, ["PaymentsForRepurchaseOfCommonStock"], periods);
   const issuance = annualSeries(facts, ["ProceedsFromIssuanceOfCommonStock"], periods);
   const depreciation = annualSeries(facts, DEPRECIATION_AND_AMORTIZATION_TAGS, periods);
+  const shareBasedComp = annualSeriesWithFallback(facts, SHARE_BASED_COMPENSATION_TAGS, periods);
 
   const years = topYears(ocf, periods);
   return years.map((fy) => {
@@ -574,6 +608,7 @@ export function parseAnnualCashFlowStatements(
       stockIssuance: issuance.get(fy) ?? null,
       netDebtIssuance: null,
       depreciationAndAmortization: depreciation.get(fy) ?? null,
+      shareBasedCompensation: shareBasedComp.get(fy) ?? null,
     };
   });
 }

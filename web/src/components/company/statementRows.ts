@@ -73,6 +73,7 @@ export const BALANCE_ROWS: RowConfig[] = [
 export const CASH_FLOW_ROWS: RowConfig[] = [
   { key: "operatingCashFlow", label: "Operating Cash Flow", indent: 0, unit: "currency" },
   { key: "depreciationAndAmortization", label: "Depreciation & Amortization", indent: 1, unit: "currency" },
+  { key: "shareBasedCompensation", label: "Share-Based Compensation", indent: 1, unit: "currency" },
   { key: "capitalExpenditures", label: "Capital Expenditures", indent: 1, unit: "currency" },
   { key: "freeCashFlow", label: "Free Cash Flow", indent: 0, unit: "currency" },
   { key: "dividendsPaid", label: "Dividends Paid", indent: 1, unit: "currency" },

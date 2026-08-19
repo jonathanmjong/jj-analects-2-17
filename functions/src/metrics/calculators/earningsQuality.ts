@@ -46,6 +46,44 @@ export const netOperatingAssets: MetricCalculator = (i) => {
   return (totalEquity + totalDebt - cashAndEquivalents) / priorTotalAssets;
 };
 
+/**
+ * Share-based compensation as a share of revenue — what the dilution shown by `share_count_change`
+ * actually costs, scaled to the size of the business.
+ *
+ * `?? null` rather than a direct null check: the field is optional on CashFlowStatement, so a
+ * statement written before it existed reads back as undefined, and undefined must behave exactly
+ * like null here (a filer that reports no SBC is not a filer with zero SBC).
+ *
+ * Revenue must be strictly positive, not merely non-zero: a negative revenue figure would flip the
+ * ratio's sign and rank a company with heavy SBC as if it had none.
+ */
+export const sbcToRevenue: MetricCalculator = (i) => {
+  const sbc = i.current.cashFlow.shareBasedCompensation ?? null;
+  const { revenue } = i.current.income;
+  if (sbc === null || revenue === null || revenue <= 0) return null;
+  return sbc / revenue;
+};
+
+/**
+ * Share-based compensation as a share of free cash flow — the sharper of the two, because free
+ * cash flow is itself overstated by exactly this number: SBC is added back to operating cash flow
+ * as non-cash, so a company paying a large part of its payroll in stock reports free cash flow it
+ * never had to fund in cash.
+ *
+ * Non-positive free cash flow is SUPPRESSED, not ranked. The metric is "asc" (lower is better), so
+ * a negative denominator would produce a negative ratio and hand a cash-burning company the best
+ * score in the universe, while a near-zero denominator produces an arbitrarily large one — neither
+ * is a reading the accounting supports. The suppression is not free: it drops exactly the
+ * cash-burning companies where SBC matters most, which is why the metric carries a "caveat"
+ * verdict (and therefore a reduced default weight) in shared/src/metricRationale.ts.
+ */
+export const sbcToFcf: MetricCalculator = (i) => {
+  const sbc = i.current.cashFlow.shareBasedCompensation ?? null;
+  const { freeCashFlow } = i.current.cashFlow;
+  if (sbc === null || freeCashFlow === null || freeCashFlow <= 0) return null;
+  return sbc / freeCashFlow;
+};
+
 /** 1 if FCF exceeds reported net income (cash-backed earnings), else 0. */
 export const fcfExceedsNetIncome: MetricCalculator = (i) => {
   const { freeCashFlow } = i.current.cashFlow;

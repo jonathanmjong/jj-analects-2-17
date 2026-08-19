@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BALANCE_ROWS, buildStatementRows, computeYoyChange, fiscalYearLabel, formatStatementValue, INCOME_ROWS, rowTrend, sparklinePoints, statementYears, type StatementPeriod, groupStatementRows, type StatementRow } from "./statementRows";
+import { BALANCE_ROWS, buildStatementRows, CASH_FLOW_ROWS, computeYoyChange, fiscalYearLabel, formatStatementValue, INCOME_ROWS, rowTrend, sparklinePoints, statementYears, type StatementPeriod, groupStatementRows, type StatementRow } from "./statementRows";
 
 function incomePeriod(fiscalYear: number, fields: Record<string, number | null>): StatementPeriod {
   return { fiscalYear, ...fields } as StatementPeriod;
@@ -19,6 +19,57 @@ describe("row configs", () => {
 
   it("no longer labels totalDebt as long-term, since its basis varies by filer", () => {
     expect(BALANCE_ROWS.find((r) => r.key === "totalDebt")?.label).toBe("Debt");
+  });
+
+  it("shows share-based compensation as an operating-cash-flow add-back, beside D&A", () => {
+    const sbc = CASH_FLOW_ROWS.find((r) => r.key === "shareBasedCompensation");
+    expect(sbc?.label).toBe("Share-Based Compensation");
+    expect(sbc?.unit).toBe("currency");
+    // indent 1 nests it under Operating Cash Flow, which is what makes it read as an add-back
+    // rather than a statement subtotal of its own.
+    expect(sbc?.indent).toBe(1);
+    const keys = CASH_FLOW_ROWS.map((r) => r.key);
+    expect(keys.indexOf("shareBasedCompensation")).toBe(keys.indexOf("depreciationAndAmortization") + 1);
+    expect(keys.indexOf("shareBasedCompensation")).toBeLessThan(keys.indexOf("freeCashFlow"));
+  });
+});
+
+describe("cash flow rows — share-based compensation", () => {
+  const cashFlowPeriod = (fiscalYear: number, fields: Record<string, number | null>): StatementPeriod =>
+    ({ fiscalYear, ...fields }) as StatementPeriod;
+
+  it("renders the reported figure compactly", () => {
+    const rows = buildStatementRows(
+      [
+        cashFlowPeriod(2024, { operatingCashFlow: 118_254_000_000, shareBasedCompensation: 11_688_000_000 }),
+        cashFlowPeriod(2025, { operatingCashFlow: 120_000_000_000, shareBasedCompensation: 12_863_000_000 }),
+      ],
+      CASH_FLOW_ROWS,
+    );
+    const sbc = rows.find((r) => r.key === "shareBasedCompensation");
+    expect(sbc?.cells.map((c) => c.value)).toEqual([11_688_000_000, 12_863_000_000]);
+    expect(formatStatementValue(sbc!.cells[1].value, sbc!.unit)).toBe("$12.9B");
+  });
+
+  it("groups under Operating Cash Flow rather than heading its own group", () => {
+    const groups = groupStatementRows(
+      buildStatementRows(
+        [cashFlowPeriod(2025, { operatingCashFlow: 220, shareBasedCompensation: 80, freeCashFlow: 170 })],
+        CASH_FLOW_ROWS,
+      ),
+    );
+    const operating = groups.find((g) => g.parent?.key === "operatingCashFlow");
+    expect(operating?.children.map((c) => c.key)).toContain("shareBasedCompensation");
+  });
+
+  it("drops the row entirely for a filer that never reports it, rather than showing zeros", () => {
+    // Statements ingested before the field existed read back undefined; a filer like Exxon that
+    // tags neither XBRL concept reads back null. Both must produce no row at all.
+    const rows = buildStatementRows(
+      [cashFlowPeriod(2025, { operatingCashFlow: 55_000_000_000, shareBasedCompensation: null }), cashFlowPeriod(2024, { operatingCashFlow: 50_000_000_000 })],
+      CASH_FLOW_ROWS,
+    );
+    expect(rows.map((r) => r.key)).not.toContain("shareBasedCompensation");
   });
 });
 
