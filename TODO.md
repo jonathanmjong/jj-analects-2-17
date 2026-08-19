@@ -33,9 +33,15 @@ Running list of known open items. Not a full backlog — just things worth not f
   134/1344 (10%) → 40 (3%) by resolving `NetIncomeLoss` →
   `NetIncomeLossAvailableToCommonStockholdersBasic` → `ProfitLoss` per fiscal period. What is
   left, in order of size:
-  - **WELL and AMT report nothing under any of the three tags** (CIKs 0000766704 /
-    0001053507) — probably a CIK/registrant change where the operating partnership co-files.
-    Not fixable by tag precedence; needs a look at the actual submissions.
+  - ~~WELL and AMT report nothing under any of the three tags~~ — **WRONG, and already
+    fixed (checked 2026-08-19).** Both carry recent annual facts under
+    `NetIncomeLossAvailableToCommonStockholdersBasic`, and production has had correct values
+    since the per-period fallback shipped: WELL FY2025 $936,845,000, AMT FY2025
+    $2,529,500,000. What is true is that both STOPPED tagging `NetIncomeLoss` mid-history —
+    WELL's last annual is FY2011, AMT's FY2020 — which is precisely the dropoff pattern the
+    fallback was built for, and the provenance log confirms it
+    ("net income resolved from NetIncomeLoss + NetIncomeLossAvailableToCommonStockholdersBasic").
+    No registrant-change theory needed.
   - **`operatingIncome`: derivation TESTED AND REJECTED on evidence (2026-08-17).** The
     previously-suggested route, `Revenues − CostsAndExpenses`, is wrong: for XOM it equals
     pretax income EXACTLY (delta 0 in FY2024 and FY2025), because `CostsAndExpenses` already
