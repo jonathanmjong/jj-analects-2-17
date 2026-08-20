@@ -6,6 +6,47 @@ export interface StatementPeriodMeta {
   periodType: PeriodType;
   fiscalYear: number;
   periodEnd: string;
+  /**
+   * The date this row's numbers became PUBLIC: the LATEST SEC `filed` date among the XBRL facts
+   * that supplied the values on this row, or null when no usable date exists.
+   *
+   * Why the latest and not the first-reported date. A row is assembled per concept, and each
+   * concept resolves to the most recently filed fact for that fiscal period end ("later `filed`
+   * wins"), so a restated figure REPLACES the original. The values on the row are therefore the
+   * restated ones, and the earliest contributing filing did not contain them. Stamping this row
+   * with the original 10-K's date would assert that these numbers were knowable months or years
+   * before they existed — the exact look-ahead bias this field is here to make detectable. The
+   * maximum is the only date the whole row is simultaneously true as of, and it is the
+   * conservative direction: it can only ever delay when a backtest may use the row, never let it
+   * peek. Read it as "as filed up to", not "first reported".
+   *
+   * Consequences worth knowing before using it:
+   * - It is usually NOT the date that fiscal year's own 10-K was filed, for any year but the
+   *   latest. A 10-K repeats prior years as comparative columns, and the newest filing that
+   *   repeats a period is the one whose numbers win — so the value really did come from that
+   *   later filing and the date says so. Verified on EDGAR 2026-08: Apple's FY2022 income row
+   *   reads 2024-11-01 (the FY2024 10-K's comparative column), and its FY2022 balance row reads
+   *   2025-10-31 because the FY2025 10-K's statement of equity still carries FY2022 balances.
+   *   The two differ because each row maxes over its own contributors, and 2025-10-31 is the
+   *   first date on which every number on that balance row was simultaneously public.
+   * - It is NOT a stable identifier of the original filing. When a period is later restated, a
+   *   re-ingest moves this date forward for that same periodKey; a date that advances between
+   *   ingests IS the restatement signal (no second field is needed to detect one, and a second
+   *   vaguer date would just invite mixing the two meanings).
+   * - Different rows of the same fiscal year (income vs balance vs cash flow) can carry different
+   *   dates. Each is the max over its OWN contributing facts.
+   * - A point-in-time backtest must gate on this, not on `periodEnd`, and must accept that a row
+   *   whose filedAt is null has no defensible as-of date at all.
+   * - `periodEnd` from the SEC provider is a synthetic `${fiscalYear}-12-31`, not the true fiscal
+   *   period end, so filedAt < periodEnd is expected and harmless for non-December filers (Apple's
+   *   FY2025 ends 2025-09-27 and was filed 2025-10-30, both inside a periodEnd of 2025-12-31).
+   *   Compare filedAt against the real fiscal period end, never against this field.
+   *
+   * Never fabricated: a filer whose facts carry no parseable `filed` — or one whose `filed`
+   * precedes the period it reports, which no real filing does — yields null. Today's date is
+   * never substituted — a wrong as-of date is worse than an absent one, because it is silently
+   * usable.
+   */
   filedAt: string | null;
   sourceProvider: string;
 }

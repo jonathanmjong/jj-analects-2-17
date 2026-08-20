@@ -331,6 +331,79 @@ function annualPeriodEnds(facts: CompanyFacts | null, tags: string[]): Map<numbe
   return out;
 }
 
+/**
+ * SEC `filed` values are plain ISO calendar dates. Anything else — absent, empty, or unparseable —
+ * is treated as no date at all rather than coerced, because `filedAt` is the field a point-in-time
+ * backtest would trust; a fabricated or today-defaulted date there is silently usable and wrong,
+ * while a null is visibly unusable.
+ */
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Also rejects a `filed` that precedes the fact's own period `end`, which is not a real filing —
+ * nobody reports a period's numbers before the period closes — and is the one corruption that
+ * would defeat the purpose of the field, since a filedAt earlier than the period end reads as
+ * "knowable before it happened" and would license exactly the look-ahead a point-in-time gate
+ * exists to prevent. Dropping it costs at most one contributor's date on a row whose other
+ * concepts still carry sound ones.
+ */
+function usableFiledDate(fact: XbrlFact): string | null {
+  const filed = fact.filed;
+  if (typeof filed !== "string" || !ISO_DATE.test(filed) || Number.isNaN(Date.parse(filed))) return null;
+  if (ISO_DATE.test(fact.end) && filed < fact.end) return null;
+  return filed;
+}
+
+/**
+ * The `filed` date of the fact that supplied each derived fiscal year's value — the filing-date
+ * mirror of seriesByFiscalYear, deliberately assigning years the exact same way (ascending by
+ * `end`, later period end wins the calendar-year slot) so a year's date always belongs to the very
+ * fact whose number landed on the statement row. A winning fact with no usable `filed` clears the
+ * year rather than leaving an earlier fact's date standing in for it.
+ */
+function filedDatesByFiscalYear(annualFacts: XbrlFact[]): Map<number, string> {
+  const out = new Map<number, string>();
+  for (const fact of annualFacts) {
+    const fy = new Date(fact.end).getUTCFullYear();
+    const filed = usableFiledDate(fact);
+    if (filed) out.set(fy, filed);
+    else out.delete(fy);
+  }
+  return out;
+}
+
+/**
+ * Filing date per derived fiscal year, same selection rules as annualSeries (it reuses
+ * annualFactsByEnd, so 10-K only, 350-380 day durations, dedupe on `end` and later-`filed`-wins all
+ * still apply). Not trimmed to `periods`: callers look years up by key, and the extra entries are
+ * the ones topYears already discarded.
+ */
+export function annualFiledDates(facts: CompanyFacts | null, tags: string[]): Map<number, string> {
+  return filedDatesByFiscalYear(annualFactsByEnd(facts, tags));
+}
+
+/** annualFiledDates for concepts resolved by strict per-period tag precedence (annualSeriesWithFallback). */
+function annualFiledDatesWithFallback(facts: CompanyFacts | null, orderedTags: string[]): Map<number, string> {
+  return filedDatesByFiscalYear(annualFactsByEndWithFallback(facts, orderedTags).map((r) => r.fact));
+}
+
+/**
+ * The statement row's `filedAt`: the LATEST filing date across every concept that contributed a
+ * value to that fiscal year. See StatementPeriodMeta.filedAt for why the maximum is the only
+ * defensible choice — the row carries restated values, so it was not knowable at the date of the
+ * earliest filing behind it. ISO dates compare lexicographically, so a string max is a date max.
+ */
+function latestFiledByFiscalYear(sources: Map<number, string>[]): Map<number, string> {
+  const out = new Map<number, string>();
+  for (const source of sources) {
+    for (const [fy, filed] of source) {
+      const existing = out.get(fy);
+      if (!existing || filed > existing) out.set(fy, filed);
+    }
+  }
+  return out;
+}
+
 function topYears(series: Map<number, number>, periods: number): number[] {
   return [...series.keys()].sort((a, b) => b - a).slice(0, periods);
 }
@@ -581,13 +654,29 @@ export function parseAnnualCashFlowStatements(
   periods: number,
   sourceProvider: string,
 ): CashFlowStatement[] {
-  const ocf = annualSeries(facts, ["NetCashProvidedByUsedInOperatingActivities"], periods);
-  const capex = annualSeries(facts, ["PaymentsToAcquirePropertyPlantAndEquipment"], periods);
-  const dividends = annualSeries(facts, ["PaymentsOfDividends"], periods);
-  const buybacks = annualSeries(facts, ["PaymentsForRepurchaseOfCommonStock"], periods);
-  const issuance = annualSeries(facts, ["ProceedsFromIssuanceOfCommonStock"], periods);
+  const ocfTags = ["NetCashProvidedByUsedInOperatingActivities"];
+  const capexTags = ["PaymentsToAcquirePropertyPlantAndEquipment"];
+  const dividendTags = ["PaymentsOfDividends"];
+  const buybackTags = ["PaymentsForRepurchaseOfCommonStock"];
+  const issuanceTags = ["ProceedsFromIssuanceOfCommonStock"];
+
+  const ocf = annualSeries(facts, ocfTags, periods);
+  const capex = annualSeries(facts, capexTags, periods);
+  const dividends = annualSeries(facts, dividendTags, periods);
+  const buybacks = annualSeries(facts, buybackTags, periods);
+  const issuance = annualSeries(facts, issuanceTags, periods);
   const depreciation = annualSeries(facts, DEPRECIATION_AND_AMORTIZATION_TAGS, periods);
   const shareBasedComp = annualSeriesWithFallback(facts, SHARE_BASED_COMPENSATION_TAGS, periods);
+
+  const filedAt = latestFiledByFiscalYear([
+    annualFiledDates(facts, ocfTags),
+    annualFiledDates(facts, capexTags),
+    annualFiledDates(facts, dividendTags),
+    annualFiledDates(facts, buybackTags),
+    annualFiledDates(facts, issuanceTags),
+    annualFiledDates(facts, DEPRECIATION_AND_AMORTIZATION_TAGS),
+    annualFiledDatesWithFallback(facts, SHARE_BASED_COMPENSATION_TAGS),
+  ]);
 
   const years = topYears(ocf, periods);
   return years.map((fy) => {
@@ -598,7 +687,7 @@ export function parseAnnualCashFlowStatements(
       periodType: "FY" as const,
       fiscalYear: fy,
       periodEnd: `${fy}-12-31`,
-      filedAt: null,
+      filedAt: filedAt.get(fy) ?? null,
       sourceProvider,
       operatingCashFlow,
       capitalExpenditures: capexVal !== null ? -Math.abs(capexVal) : null,
@@ -719,17 +808,40 @@ export class SecEdgarProvider extends FinancialDataProvider {
   }
 
   private extractIncomeStatements(facts: CompanyFacts | null, periods: number, ticker?: string): IncomeStatement[] {
-    const revenue = annualSeries(facts, ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"], periods);
+    const revenueTags = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"];
+    const rndTags = ["ResearchAndDevelopmentExpense"];
+    const opIncomeTags = ["OperatingIncomeLoss"];
+    const interestExpenseTags = ["InterestExpense"];
+    const pretaxTags = ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"];
+    const taxTags = ["IncomeTaxExpenseBenefit"];
+    const epsDilutedTags = ["EarningsPerShareDiluted"];
+    const dilutedSharesTags = ["WeightedAverageNumberOfDilutedSharesOutstanding"];
+
+    const revenue = annualSeries(facts, revenueTags, periods);
     const grossProfit = annualSeriesWithFallback(facts, GROSS_PROFIT_TAGS, periods);
     const costOfRevenue = annualSeriesWithFallback(facts, COST_OF_REVENUE_TAGS, periods);
-    const rnd = annualSeries(facts, ["ResearchAndDevelopmentExpense"], periods);
-    const opIncome = annualSeries(facts, ["OperatingIncomeLoss"], periods);
-    const interestExpense = annualSeries(facts, ["InterestExpense"], periods);
-    const pretax = annualSeries(facts, ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"], periods);
-    const tax = annualSeries(facts, ["IncomeTaxExpenseBenefit"], periods);
+    const rnd = annualSeries(facts, rndTags, periods);
+    const opIncome = annualSeries(facts, opIncomeTags, periods);
+    const interestExpense = annualSeries(facts, interestExpenseTags, periods);
+    const pretax = annualSeries(facts, pretaxTags, periods);
+    const tax = annualSeries(facts, taxTags, periods);
     const netIncome = annualSeriesWithFallback(facts, NET_INCOME_TAGS, periods);
-    const epsDiluted = annualSeries(facts, ["EarningsPerShareDiluted"], periods);
-    const dilutedShares = annualSeries(facts, ["WeightedAverageNumberOfDilutedSharesOutstanding"], periods);
+    const epsDiluted = annualSeries(facts, epsDilutedTags, periods);
+    const dilutedShares = annualSeries(facts, dilutedSharesTags, periods);
+
+    const filedAt = latestFiledByFiscalYear([
+      annualFiledDates(facts, revenueTags),
+      annualFiledDatesWithFallback(facts, GROSS_PROFIT_TAGS),
+      annualFiledDatesWithFallback(facts, COST_OF_REVENUE_TAGS),
+      annualFiledDates(facts, rndTags),
+      annualFiledDates(facts, opIncomeTags),
+      annualFiledDates(facts, interestExpenseTags),
+      annualFiledDates(facts, pretaxTags),
+      annualFiledDates(facts, taxTags),
+      annualFiledDatesWithFallback(facts, NET_INCOME_TAGS),
+      annualFiledDates(facts, epsDilutedTags),
+      annualFiledDates(facts, dilutedSharesTags),
+    ]);
 
     // Net income is the most load-bearing field in the dataset (P/E, every margin, growth CAGRs,
     // F-Score). Nothing records WHICH basis it came from — see the IncomeStatement shape — so at
@@ -751,7 +863,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
         periodType: "FY" as const,
         fiscalYear: fy,
         periodEnd: `${fy}-12-31`,
-        filedAt: null,
+        filedAt: filedAt.get(fy) ?? null,
         sourceProvider: this.name,
         revenue: revenueVal,
         costOfRevenue: costOfRevenueVal,
@@ -778,19 +890,48 @@ export class SecEdgarProvider extends FinancialDataProvider {
   }
 
   private extractBalanceSheets(facts: CompanyFacts | null, periods: number, ticker?: string): BalanceSheet[] {
-    const cash = annualSeries(facts, ["CashAndCashEquivalentsAtCarryingValue"], periods);
-    const receivables = annualSeries(facts, ["AccountsReceivableNetCurrent"], periods);
-    const inventory = annualSeries(facts, ["InventoryNet"], periods);
-    const currentAssets = annualSeries(facts, ["AssetsCurrent"], periods);
-    const totalAssets = annualSeries(facts, ["Assets"], periods);
-    const intangibles = annualSeries(facts, ["IntangibleAssetsNetExcludingGoodwill"], periods);
-    const goodwill = annualSeries(facts, ["Goodwill"], periods);
-    const currentLiabilities = annualSeries(facts, ["LiabilitiesCurrent"], periods);
-    const payables = annualSeries(facts, ["AccountsPayableCurrent"], periods);
+    const cashTags = ["CashAndCashEquivalentsAtCarryingValue"];
+    const receivableTags = ["AccountsReceivableNetCurrent"];
+    const inventoryTags = ["InventoryNet"];
+    const currentAssetTags = ["AssetsCurrent"];
+    const totalAssetTags = ["Assets"];
+    const intangibleTags = ["IntangibleAssetsNetExcludingGoodwill"];
+    const goodwillTags = ["Goodwill"];
+    const currentLiabilityTags = ["LiabilitiesCurrent"];
+    const payableTags = ["AccountsPayableCurrent"];
+    const totalLiabilityTags = ["Liabilities"];
+    const equityTags = ["StockholdersEquity"];
+    const retainedEarningsTags = ["RetainedEarningsAccumulatedDeficit"];
+
+    const cash = annualSeries(facts, cashTags, periods);
+    const receivables = annualSeries(facts, receivableTags, periods);
+    const inventory = annualSeries(facts, inventoryTags, periods);
+    const currentAssets = annualSeries(facts, currentAssetTags, periods);
+    const totalAssets = annualSeries(facts, totalAssetTags, periods);
+    const intangibles = annualSeries(facts, intangibleTags, periods);
+    const goodwill = annualSeries(facts, goodwillTags, periods);
+    const currentLiabilities = annualSeries(facts, currentLiabilityTags, periods);
+    const payables = annualSeries(facts, payableTags, periods);
     const longTermDebt = annualSeriesWithFallback(facts, TOTAL_DEBT_TAGS, periods);
-    const totalLiabilities = annualSeries(facts, ["Liabilities"], periods);
-    const equity = annualSeries(facts, ["StockholdersEquity"], periods);
-    const retainedEarnings = annualSeries(facts, ["RetainedEarningsAccumulatedDeficit"], periods);
+    const totalLiabilities = annualSeries(facts, totalLiabilityTags, periods);
+    const equity = annualSeries(facts, equityTags, periods);
+    const retainedEarnings = annualSeries(facts, retainedEarningsTags, periods);
+
+    const filedAt = latestFiledByFiscalYear([
+      annualFiledDates(facts, cashTags),
+      annualFiledDates(facts, receivableTags),
+      annualFiledDates(facts, inventoryTags),
+      annualFiledDates(facts, currentAssetTags),
+      annualFiledDates(facts, totalAssetTags),
+      annualFiledDates(facts, intangibleTags),
+      annualFiledDates(facts, goodwillTags),
+      annualFiledDates(facts, currentLiabilityTags),
+      annualFiledDates(facts, payableTags),
+      annualFiledDatesWithFallback(facts, TOTAL_DEBT_TAGS),
+      annualFiledDates(facts, totalLiabilityTags),
+      annualFiledDates(facts, equityTags),
+      annualFiledDates(facts, retainedEarningsTags),
+    ]);
 
     // Nothing in the BalanceSheet shape records which tag a debt figure came from, and the lower
     // half of TOTAL_DEBT_TAGS is a broader quantity than "long-term debt" — leave the provenance
@@ -814,7 +955,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
         periodType: "FY" as const,
         fiscalYear: fy,
         periodEnd: `${fy}-12-31`,
-        filedAt: null,
+        filedAt: filedAt.get(fy) ?? null,
         sourceProvider: this.name,
         cashAndEquivalents: cash.get(fy) ?? null,
         shortTermInvestments: null,
