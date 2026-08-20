@@ -64,7 +64,11 @@ npm run dev:web          # Vite dev server
 npm run emulators        # Firebase emulators (auth, firestore, functions, hosting, storage)
 npm test                 # Vitest: shared + functions + web
 npm run test:e2e         # Playwright smoke tests
-npm run lint             # oxlint (web) + eslint (functions)
+npm run lint             # oxlint across web, functions and shared (root devDependency)
+npm run typecheck -w web # tsc -b --force. NOT `tsc --noEmit`: web/tsconfig.json is a
+                         # project-references root with "files": [], so --noEmit silently
+                         # checks ZERO files and exits 0 no matter what is broken.
+                         # (npm run build:web does run the real check — it is `tsc -b && vite build`.)
 ```
 
 ## Deploy — CI/CD only, never `firebase deploy` directly from an agent session

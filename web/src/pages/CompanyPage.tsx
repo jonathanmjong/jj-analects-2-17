@@ -1,14 +1,16 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { aggregateSentiment, DEFAULT_YEAR_WEIGHTS, isMetricApplicable, MARKET_CAP_INPUT_KEY, METRIC_CATEGORIES, type MetricDefinition, type SentimentLabel } from "@proverbs/shared";
 import { useCompanyDetail } from "../hooks/useCompanyDetail";
 import { useCompaniesList } from "../hooks/useCompanies";
 import { useCustomRankings } from "../hooks/useCustomRankings";
 import { useMetricDefinitions } from "../hooks/useMetricDefinitions";
+import { usePrintMode } from "../hooks/usePrintMode";
 import { useSentimentSources } from "../hooks/useSentimentSources";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { ScorePill } from "../components/ui/ScorePill";
+import { SegmentedTabs, segmentedTabId } from "../components/ui/SegmentedTabs";
 import { WatchlistButton } from "../components/ui/WatchlistButton";
 import { Slider } from "../components/ui/Slider";
 import { SpiderChart } from "../components/charts/SpiderChart";
@@ -18,6 +20,7 @@ import { PriceHistoryChart } from "../components/charts/PriceHistoryChart";
 import { SentimentSourcePicker } from "../components/sentiment/SentimentSourcePicker";
 import { CapitalAllocationPanel } from "../components/company/CapitalAllocationPanel";
 import { CompanyOverviewPanel } from "../components/company/CompanyOverviewPanel";
+import { COMPANY_TABS, DEFAULT_COMPANY_TAB, companyTabEmptyReason, type CompanyTabDataPresence, type CompanyTabId } from "../components/company/companyTabs";
 import { ForensicPanel } from "../components/company/ForensicPanel";
 import { GrowthRoicChart } from "../components/company/GrowthRoicChart";
 import { NormalizedEarningsPanel } from "../components/company/NormalizedEarningsPanel";
@@ -49,6 +52,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   moat: "Competitive Moat",
 };
 
+const TABS_ID_BASE = "company";
+
 export function CompanyPage() {
   const { ticker = "" } = useParams<{ ticker: string }>();
   const { data, isLoading } = useCompanyDetail(ticker);
@@ -57,6 +62,8 @@ export function CompanyPage() {
   const { data: metricDefinitions } = useMetricDefinitions();
   const { selected: selectedSentimentSources, toggle: toggleSentimentSource } = useSentimentSources();
   const [years, setYears] = useState(5);
+  const [activeTab, setActiveTab] = useState<CompanyTabId>(DEFAULT_COMPANY_TAB);
+  const printing = usePrintMode();
 
   // Metrics are calculated for every company regardless of sector, but ones the
   // ranking engine treats as inapplicable never reach that company's score —
@@ -129,15 +136,384 @@ export function CompanyPage() {
   if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
   if (!data) return <p className="text-muted-foreground">No data for {ticker} yet.</p>;
 
-  const { company } = data;
-  const yearColumns = data.metricScoresByPeriod.slice(0, 5);
+  // Narrowed to a const because the null check above does not survive into the section
+  // render closures below, which TypeScript treats as callable at any later time.
+  const detail = data;
+  const { company } = detail;
+  const yearColumns = detail.metricScoresByPeriod.slice(0, 5);
   const effectiveSentiment = company.latest?.sentiment
     ? aggregateSentiment(company.latest.sentiment.bySource, selectedSentimentSources)
     : null;
-  const visibleHeadlines = data.sentimentHeadlines.filter((h) => selectedSentimentSources.includes(h.source));
+  const visibleHeadlines = detail.sentimentHeadlines.filter((h) => selectedSentimentSources.includes(h.source));
+
+  const presence: CompanyTabDataPresence = {
+    ticker: company.ticker,
+    hasStatements: detail.income.length > 0 || detail.balance.length > 0 || detail.cashFlow.length > 0,
+    hasMetricScores: yearColumns.length > 0,
+    hasSentiment: !!company.latest?.sentiment,
+  };
+
+  /** Below-the-fold content inside a tab still defers — except during a print, where
+   * everything has to be in the document before the browser paginates it. */
+  function deferred(minHeight: number, node: ReactNode) {
+    return (
+      <DeferUntilVisible minHeight={minHeight} forceVisible={printing}>
+        {node}
+      </DeferUntilVisible>
+    );
+  }
+
+  function tabContent(tab: CompanyTabId): ReactNode {
+    switch (tab) {
+      case "overview":
+        return (
+          <>
+            <CompanyOverviewPanel
+              company={company}
+              ranking={ranking}
+              income={detail.income}
+              balance={detail.balance}
+              cashFlow={detail.cashFlow}
+            />
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Price History</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <PriceHistoryChart points={detail.priceHistory} />
+              </CardContent>
+            </Card>
+
+            {deferred(
+              420,
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Category Scores</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <SpiderChart
+                      categories={METRIC_CATEGORIES.map((c) => CATEGORY_LABELS[c])}
+                      series={[
+                        {
+                          name: company.ticker,
+                          color: "var(--color-accent)",
+                          values: Object.fromEntries(
+                            (ranking?.categoryScores ?? []).map((c) => [CATEGORY_LABELS[c.category], (c.score ?? 0) * 100]),
+                          ),
+                        },
+                      ]}
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Peer / Sector Comparison</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">{company.ticker} overall score</span>
+                      <ScorePill score={ranking?.overallScore ?? null} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">{company.sector ?? "Sector"} average</span>
+                      <ScorePill score={sectorAvgScore} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Based on {peers?.length ?? 0} companies currently ingested in this sector.
+                    </p>
+                    {ranking?.coverage && (
+                      <p className="text-xs text-muted-foreground">
+                        Score coverage:{" "}
+                        <span className={ranking.coverage.tier === "thin" ? "text-negative" : undefined}>
+                          {ranking.coverage.metricsIncluded} of {ranking.coverage.metricsApplicable} applicable metrics
+                        </span>
+                        {ranking.coverage.tier === "thin" && " — this score rests on a small share of the model, so treat it as weaker evidence than a fully covered company's."}
+                        {ranking.coverage.metricsApplicable < 60 &&
+                          ` Metrics that don't apply to ${company.sector ?? "this sector"} are excluded from the total rather than counted as missing.`}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>,
+            )}
+          </>
+        );
+
+      case "valuation":
+        return (
+          <>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ReverseDcfPanel
+                income={detail.income}
+                balance={detail.balance}
+                cashFlow={detail.cashFlow}
+                sector={detail.company.sector ?? null}
+                sharePrice={detail.company.latest?.sharePrice ?? null}
+                sharesOutstanding={detail.company.latest?.sharesOutstanding ?? null}
+              />
+              <ValuationHistoryPanel
+                ticker={detail.company.ticker}
+                sector={detail.company.sector ?? null}
+                todayMarketCap={detail.company.latest?.marketCap ?? null}
+                income={detail.income}
+                balance={detail.balance}
+                priceSource={detail.company.latest?.priceSource}
+              />
+            </div>
+            {deferred(
+              900,
+              <div className="grid gap-4 lg:grid-cols-2">
+                <NormalizedEarningsPanel
+                  ticker={detail.company.ticker}
+                  sector={detail.company.sector ?? null}
+                  todayMarketCap={detail.company.latest?.marketCap ?? null}
+                  priceSource={detail.company.latest?.priceSource}
+                />
+                <ScenarioTool
+                  income={detail.income}
+                  cashFlow={detail.cashFlow}
+                  sharePrice={detail.company.latest?.sharePrice ?? null}
+                  sharesOutstanding={detail.company.latest?.sharesOutstanding ?? null}
+                />
+                <StrategyScorecard metricValues={latestMetricValues} />
+              </div>,
+            )}
+          </>
+        );
+
+      case "quality":
+        return (
+          <>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ForensicPanel
+                income={detail.income}
+                balance={detail.balance}
+                cashFlow={detail.cashFlow}
+                marketCap={detail.company.latest?.marketCap ?? null}
+                sector={detail.company.sector ?? null}
+              />
+              <CapitalAllocationPanel
+                income={detail.income}
+                balance={detail.balance}
+                cashFlow={detail.cashFlow}
+                sector={detail.company.sector ?? null}
+              />
+            </div>
+            {deferred(
+              480,
+              <div className="grid gap-4 lg:grid-cols-2">
+                <GrowthRoicChart income={detail.income} balance={detail.balance} />
+              </div>,
+            )}
+          </>
+        );
+
+      case "financials":
+        return (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>Financial Statements</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <StatementsExplorer income={detail.income} balance={detail.balance} cashFlow={detail.cashFlow} />
+              </CardContent>
+            </Card>
+
+            {deferred(
+              280,
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Revenue History</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <HistoryLineChart data={revenueHistory} label="Revenue" formatValue={(v) => formatCurrency(v, { compact: true })} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Free Cash Flow History</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <HistoryLineChart data={fcfHistory} label="FCF" formatValue={(v) => formatCurrency(v, { compact: true })} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Gross Margin History</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <HistoryLineChart data={marginHistory} label="Gross Margin" formatValue={(v) => formatPercent(v)} />
+                  </CardContent>
+                </Card>
+              </div>,
+            )}
+
+            {deferred(
+              360,
+              <Card>
+                <CardHeader>
+                  <CardTitle>Revenue → Net Income Bridge (most recent fiscal year)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <IncomeWaterfall
+                    data={{
+                      revenue: detail.income[0]?.revenue ?? null,
+                      grossProfit: detail.income[0]?.grossProfit ?? null,
+                      operatingIncome: detail.income[0]?.operatingIncome ?? null,
+                      pretaxIncome: detail.income[0]?.pretaxIncome ?? null,
+                      netIncome: detail.income[0]?.netIncome ?? null,
+                    }}
+                  />
+                </CardContent>
+              </Card>,
+            )}
+          </>
+        );
+
+      case "metrics":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Metric Breakdown — up to 5 fiscal years</CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <p className="mb-4 text-xs text-muted-foreground">
+                Year weights (most recent first): {DEFAULT_YEAR_WEIGHTS.map((w) => `${w * 100}%`).join(" / ")}. A missing
+                year is excluded from a metric's score and the remaining years' weights are renormalized — it is never
+                treated as zero. "P82 · #12/1319" means this company's value for that metric/year outperforms 82% of
+                peers with data, ranking 12th of 1,319.
+              </p>
+              {METRIC_CATEGORIES.map((category) => (
+                <div key={category} className="mb-6">
+                  <h3 className="mb-2 text-sm font-semibold">{CATEGORY_LABELS[category]}</h3>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase text-muted-foreground">
+                        <th className="py-2 pr-4 font-medium">Metric</th>
+                        {yearColumns.map((period, idx) => (
+                          <th key={period.periodKey} className="py-2 pr-4 text-right font-medium">
+                            {period.periodKey}
+                            <div className="text-[10px] normal-case text-muted-foreground/70">
+                              {((DEFAULT_YEAR_WEIGHTS[idx] ?? 0) * 100).toFixed(0)}% weight
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {metricsByCategory[category]?.map((metric) => (
+                        <tr key={metric.key} className="border-t border-border">
+                          <td className="py-2 pr-4 text-muted-foreground">
+                            <MetricInfoLabel metric={metric} />
+                          </td>
+                          {yearColumns.map((period) => {
+                            const score = period.scores?.[metric.key];
+                            const missing = !score || score.isMissing;
+                            return (
+                              <td key={period.periodKey} className="py-2 pr-4 text-right">
+                                {missing ? (
+                                  <span className="text-xs text-muted-foreground">Data missing</span>
+                                ) : (
+                                  <>
+                                    <div>{metric.unit === "percent" ? formatPercent(score.rawValue) : formatNumber(score.rawValue, 2)}</div>
+                                    {score.percentile !== null && (
+                                      <div className="text-[10px] text-muted-foreground">
+                                        P{Math.round(score.percentile * 100)}
+                                        {score.rankAmongPeers !== null && ` · #${score.rankAmongPeers}/${score.peerCount}`}
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        );
+
+      case "sentiment":
+        return (
+          <Card>
+            <CardHeader className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle>News Sentiment</CardTitle>
+              <div className="flex items-center gap-2">
+                <SentimentSourcePicker selected={selectedSentimentSources} onToggle={toggleSentimentSource} />
+                {effectiveSentiment ? (
+                  <>
+                    <Badge variant={labelBadgeVariant(effectiveSentiment.label)} className="capitalize">
+                      {effectiveSentiment.label}
+                    </Badge>
+                    <ScorePill score={effectiveSentiment.score} />
+                  </>
+                ) : (
+                  <span className="text-xs text-muted-foreground">No data from selected sources</span>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2 pt-2">
+              {visibleHeadlines.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recent headlines from the selected sources.</p>
+              ) : (
+                visibleHeadlines.map((h) => (
+                  <a
+                    key={h.url}
+                    href={h.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-start justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-surface-hover"
+                  >
+                    <span className="flex-1">{h.title}</span>
+                    <span
+                      className={cn(
+                        "shrink-0 whitespace-nowrap text-xs",
+                        h.score > 0.15 ? "text-positive" : h.score < -0.15 ? "text-negative" : "text-muted-foreground",
+                      )}
+                    >
+                      {h.publisher}
+                    </span>
+                  </a>
+                ))
+              )}
+              <p className="pt-1 text-xs text-muted-foreground">
+                Scored from headline text via a finance-tuned word lexicon, not an AI/ML model — a directional signal,
+                not a precise measurement.
+              </p>
+            </CardContent>
+          </Card>
+        );
+    }
+  }
+
+  function renderTab(tab: CompanyTabId): ReactNode {
+    const reason = companyTabEmptyReason(tab, presence);
+    if (reason) {
+      return (
+        <Card>
+          <CardContent className="pt-4">
+            <p className="py-8 text-center text-sm text-muted-foreground">{reason}</p>
+          </CardContent>
+        </Card>
+      );
+    }
+    return tabContent(tab);
+  }
+
+  const activeDefinition = COMPANY_TABS.find((tab) => tab.id === activeTab) ?? COMPANY_TABS[0];
+  const activePanelId = `${TABS_ID_BASE}-panel-${activeTab}`;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
@@ -175,73 +551,9 @@ export function CompanyPage() {
         </div>
       </div>
 
-      <CompanyOverviewPanel
-        company={company}
-        ranking={ranking}
-        income={data.income}
-        balance={data.balance}
-        cashFlow={data.cashFlow}
-      />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Price History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PriceHistoryChart points={data.priceHistory} />
-        </CardContent>
-      </Card>
-
-      {company.latest?.sentiment && (
-        <Card>
-          <CardHeader className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle>News Sentiment</CardTitle>
-            <div className="flex items-center gap-2">
-              <SentimentSourcePicker selected={selectedSentimentSources} onToggle={toggleSentimentSource} />
-              {effectiveSentiment ? (
-                <>
-                  <Badge variant={labelBadgeVariant(effectiveSentiment.label)} className="capitalize">
-                    {effectiveSentiment.label}
-                  </Badge>
-                  <ScorePill score={effectiveSentiment.score} />
-                </>
-              ) : (
-                <span className="text-xs text-muted-foreground">No data from selected sources</span>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2 pt-2">
-            {visibleHeadlines.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No recent headlines from the selected sources.</p>
-            ) : (
-              visibleHeadlines.map((h) => (
-                <a
-                  key={h.url}
-                  href={h.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-start justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-surface-hover"
-                >
-                  <span className="flex-1">{h.title}</span>
-                  <span
-                    className={cn(
-                      "shrink-0 whitespace-nowrap text-xs",
-                      h.score > 0.15 ? "text-positive" : h.score < -0.15 ? "text-negative" : "text-muted-foreground",
-                    )}
-                  >
-                    {h.publisher}
-                  </span>
-                </a>
-              ))
-            )}
-            <p className="pt-1 text-xs text-muted-foreground">
-              Scored from headline text via a finance-tuned word lexicon, not an AI/ML model — a directional signal,
-              not a precise measurement.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
+      {/* Stays above the tabs because it drives the overall and category scores in the
+          header and the Overview section — not the per-year metric table, which is read
+          straight from the nightly job and does not move with it. */}
       <Card>
         <CardContent className="pt-5">
           <div className="flex items-center justify-between text-sm">
@@ -251,233 +563,48 @@ export function CompanyPage() {
             </span>
           </div>
           <Slider min={1} max={5} step={1} value={years} onChange={(e) => handleYearsChange(Number(e.target.value))} className="mt-2" />
+          <p className="mt-2 text-xs text-muted-foreground">
+            Recomputes the overall and category scores — in the header above and in Overview. The Metrics table is
+            unaffected: it lists up to five fiscal years either way.
+          </p>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Category Scores</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SpiderChart
-              categories={METRIC_CATEGORIES.map((c) => CATEGORY_LABELS[c])}
-              series={[
-                {
-                  name: company.ticker,
-                  color: "var(--color-accent)",
-                  values: Object.fromEntries(
-                    (ranking?.categoryScores ?? []).map((c) => [CATEGORY_LABELS[c.category], (c.score ?? 0) * 100]),
-                  ),
-                },
-              ]}
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Peer / Sector Comparison</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 pt-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm">{company.ticker} overall score</span>
-              <ScorePill score={ranking?.overallScore ?? null} />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm">{company.sector ?? "Sector"} average</span>
-              <ScorePill score={sectorAvgScore} />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Based on {peers?.length ?? 0} companies currently ingested in this sector.
-            </p>
-            {ranking?.coverage && (
-              <p className="text-xs text-muted-foreground">
-                Score coverage:{" "}
-                <span className={ranking.coverage.tier === "thin" ? "text-negative" : undefined}>
-                  {ranking.coverage.metricsIncluded} of {ranking.coverage.metricsApplicable} applicable metrics
-                </span>
-                {ranking.coverage.tier === "thin" && " — this score rests on a small share of the model, so treat it as weaker evidence than a fully covered company's."}
-                {ranking.coverage.metricsApplicable < 60 &&
-                  ` Metrics that don't apply to ${company.sector ?? "this sector"} are excluded from the total rather than counted as missing.`}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <DeferUntilVisible minHeight={280}>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle>Revenue History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <HistoryLineChart data={revenueHistory} label="Revenue" formatValue={(v) => formatCurrency(v, { compact: true })} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Free Cash Flow History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <HistoryLineChart data={fcfHistory} label="FCF" formatValue={(v) => formatCurrency(v, { compact: true })} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Gross Margin History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <HistoryLineChart data={marginHistory} label="Gross Margin" formatValue={(v) => formatPercent(v)} />
-            </CardContent>
-          </Card>
-        </div>
-      </DeferUntilVisible>
-
-      <DeferUntilVisible minHeight={360}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Revenue → Net Income Bridge (most recent fiscal year)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <IncomeWaterfall
-              data={{
-                revenue: data.income[0]?.revenue ?? null,
-                grossProfit: data.income[0]?.grossProfit ?? null,
-                operatingIncome: data.income[0]?.operatingIncome ?? null,
-                pretaxIncome: data.income[0]?.pretaxIncome ?? null,
-                netIncome: data.income[0]?.netIncome ?? null,
-              }}
-            />
-          </CardContent>
-        </Card>
-      </DeferUntilVisible>
-
-      <DeferUntilVisible minHeight={1200}>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <ValuationHistoryPanel
-            ticker={data.company.ticker}
-            sector={data.company.sector ?? null}
-            todayMarketCap={data.company.latest?.marketCap ?? null}
-            income={data.income}
-            balance={data.balance}
-            priceSource={data.company.latest?.priceSource}
-          />
-          <NormalizedEarningsPanel
-            ticker={data.company.ticker}
-            sector={data.company.sector ?? null}
-            todayMarketCap={data.company.latest?.marketCap ?? null}
-            priceSource={data.company.latest?.priceSource}
-          />
-          <CapitalAllocationPanel
-            income={data.income}
-            balance={data.balance}
-            cashFlow={data.cashFlow}
-            sector={data.company.sector ?? null}
-          />
-          <StrategyScorecard metricValues={latestMetricValues} />
-          <GrowthRoicChart income={data.income} balance={data.balance} />
-          <ScenarioTool
-            income={data.income}
-            cashFlow={data.cashFlow}
-            sharePrice={data.company.latest?.sharePrice ?? null}
-            sharesOutstanding={data.company.latest?.sharesOutstanding ?? null}
-          />
-          <ReverseDcfPanel
-            income={data.income}
-            balance={data.balance}
-            cashFlow={data.cashFlow}
-            sector={data.company.sector ?? null}
-            sharePrice={data.company.latest?.sharePrice ?? null}
-            sharesOutstanding={data.company.latest?.sharesOutstanding ?? null}
-          />
-          <ForensicPanel
-            income={data.income}
-            balance={data.balance}
-            cashFlow={data.cashFlow}
-            marketCap={data.company.latest?.marketCap ?? null}
-            sector={data.company.sector ?? null}
-          />
-        </div>
-      </DeferUntilVisible>
-
-      <DeferUntilVisible minHeight={600}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Financial Statements</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <StatementsExplorer income={data.income} balance={data.balance} cashFlow={data.cashFlow} />
-          </CardContent>
-        </Card>
-      </DeferUntilVisible>
-
-      <DeferUntilVisible minHeight={2400}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Metric Breakdown — up to 5 fiscal years</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <p className="mb-4 text-xs text-muted-foreground">
-              Year weights (most recent first): {DEFAULT_YEAR_WEIGHTS.map((w) => `${w * 100}%`).join(" / ")}. A missing
-              year is excluded from a metric's score and the remaining years' weights are renormalized — it is never
-              treated as zero. "P82 · #12/1319" means this company's value for that metric/year outperforms 82% of
-              peers with data, ranking 12th of 1,319.
-            </p>
-            {METRIC_CATEGORIES.map((category) => (
-              <div key={category} className="mb-6">
-                <h3 className="mb-2 text-sm font-semibold">{CATEGORY_LABELS[category]}</h3>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs uppercase text-muted-foreground">
-                      <th className="py-2 pr-4 font-medium">Metric</th>
-                      {yearColumns.map((period, idx) => (
-                        <th key={period.periodKey} className="py-2 pr-4 text-right font-medium">
-                          {period.periodKey}
-                          <div className="text-[10px] normal-case text-muted-foreground/70">
-                            {((DEFAULT_YEAR_WEIGHTS[idx] ?? 0) * 100).toFixed(0)}% weight
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {metricsByCategory[category]?.map((metric) => (
-                      <tr key={metric.key} className="border-t border-border">
-                        <td className="py-2 pr-4 text-muted-foreground">
-                          <MetricInfoLabel metric={metric} />
-                        </td>
-                        {yearColumns.map((period) => {
-                          const score = period.scores?.[metric.key];
-                          const missing = !score || score.isMissing;
-                          return (
-                            <td key={period.periodKey} className="py-2 pr-4 text-right">
-                              {missing ? (
-                                <span className="text-xs text-muted-foreground">Data missing</span>
-                              ) : (
-                                <>
-                                  <div>{metric.unit === "percent" ? formatPercent(score.rawValue) : formatNumber(score.rawValue, 2)}</div>
-                                  {score.percentile !== null && (
-                                    <div className="text-[10px] text-muted-foreground">
-                                      P{Math.round(score.percentile * 100)}
-                                      {score.rankAmongPeers !== null && ` · #${score.rankAmongPeers}/${score.peerCount}`}
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+      {printing ? (
+        <div className="space-y-10">
+          {COMPANY_TABS.map((tab) => (
+            <section key={tab.id} className="space-y-6">
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight">{tab.label}</h2>
+                <p className="text-sm text-muted-foreground">{tab.summary}</p>
               </div>
-            ))}
-          </CardContent>
-        </Card>
-      </DeferUntilVisible>
+              {renderTab(tab.id)}
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <SegmentedTabs
+            idBase={TABS_ID_BASE}
+            label="Company sections"
+            size="md"
+            options={COMPANY_TABS.map((tab) => ({ value: tab.id, label: tab.label }))}
+            value={activeTab}
+            onChange={setActiveTab}
+            panelId={activePanelId}
+            className="w-fit max-w-full"
+          />
+          <div
+            id={activePanelId}
+            role="tabpanel"
+            aria-labelledby={segmentedTabId(TABS_ID_BASE, activeTab)}
+            className="space-y-6"
+          >
+            <p className="text-sm text-muted-foreground">{activeDefinition.summary}</p>
+            {renderTab(activeTab)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

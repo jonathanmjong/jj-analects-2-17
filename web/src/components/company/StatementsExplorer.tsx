@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import type { BalanceSheet, CashFlowStatement, IncomeStatement } from "@proverbs/shared";
 import { HistoryLineChart } from "../charts/HistoryLineChart";
+import { SegmentedTabs, segmentedTabId } from "../ui/SegmentedTabs";
 import { cn, formatPercent } from "../../lib/utils";
 import {
   buildStatementRows,
@@ -19,6 +20,8 @@ import {
 } from "./statementRows";
 
 const TREND_GLYPH = { up: "▲", down: "▼", flat: "▬" } as const;
+const TABS_ID_BASE = "statements";
+const STATEMENTS_PANEL_ID = "statements-panel";
 
 function RowTrendCue({ row, selected }: { row: StatementRow; selected: boolean }) {
   const trend = rowTrend(row.cells);
@@ -222,21 +225,14 @@ export function StatementsExplorer({
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-1 rounded-md border border-border bg-surface p-0.5">
-          {STATEMENT_TABS.map((tab) => (
-            <button
-              key={tab.kind}
-              type="button"
-              onClick={() => selectTab(tab.kind)}
-              className={cn(
-                "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                kind === tab.kind ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-surface-hover",
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedTabs
+          idBase={TABS_ID_BASE}
+          label="Financial statement"
+          options={STATEMENT_TABS.map((tab) => ({ value: tab.kind, label: tab.label }))}
+          value={kind}
+          onChange={selectTab}
+          panelId={STATEMENTS_PANEL_ID}
+        />
         <div className="flex items-center gap-3">
           {groups.some((g) => g.parent && g.children.length > 0) && (
             <button
@@ -251,41 +247,43 @@ export function StatementsExplorer({
         </div>
       </div>
 
-      {rows.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">No statement data available for this company yet.</p>
-      ) : (
-        <>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase text-muted-foreground">
-                  <th className="sticky left-0 z-10 bg-surface py-2 pr-4 font-medium">Line Item</th>
-                  {years.map((year) => (
-                    <th key={year} className="py-2 pl-4 text-right font-medium">
-                      {fiscalYearLabel(year)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {groups.map((group, groupIndex) => {
-                  const parent = group.parent;
-                  const groupKey = parent?.key ?? `headless-${groupIndex}`;
-                  const isOpen = parent === null || openGroups.has(parent.key);
-                  return (
-                    <Fragment key={groupKey}>
-                      {parent && renderRow(parent, group.children.length, isOpen)}
-                      {isOpen && group.children.map((child) => renderRow(child, 0, false))}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+      <div role="tabpanel" id={STATEMENTS_PANEL_ID} aria-labelledby={segmentedTabId(TABS_ID_BASE, kind)}>
+        {rows.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">No statement data available for this company yet.</p>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[36rem] text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-muted-foreground">
+                    <th className="sticky left-0 z-10 bg-surface py-2 pr-4 font-medium">Line Item</th>
+                    {years.map((year) => (
+                      <th key={year} className="py-2 pl-4 text-right font-medium">
+                        {fiscalYearLabel(year)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map((group, groupIndex) => {
+                    const parent = group.parent;
+                    const groupKey = parent?.key ?? `headless-${groupIndex}`;
+                    const isOpen = parent === null || openGroups.has(parent.key);
+                    return (
+                      <Fragment key={groupKey}>
+                        {parent && renderRow(parent, group.children.length, isOpen)}
+                        {isOpen && group.children.map((child) => renderRow(child, 0, false))}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-          {selectedRow && <SelectedRowChart row={selectedRow} />}
-        </>
-      )}
+            {selectedRow && <SelectedRowChart row={selectedRow} />}
+          </>
+        )}
+      </div>
 
       <p className="mt-3 text-xs text-muted-foreground">
         Annual 10-K data via SEC EDGAR · derived fields may differ from as-reported filings

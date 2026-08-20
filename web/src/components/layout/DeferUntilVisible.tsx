@@ -20,17 +20,25 @@ export function DeferUntilVisible({
   children,
   minHeight = 320,
   rootMargin = "600px 0px",
+  forceVisible = false,
 }: {
   children: ReactNode;
   /** Reserved space for the not-yet-mounted content, so scrolling past it doesn't jump. */
   minHeight?: number;
   rootMargin?: string;
+  /**
+   * Mount immediately, no observer. For content that only mounts *because* a print
+   * already started (the Company page's inactive tabs): the beforeprint event has
+   * already fired by then, so this instance's own listener would register too late
+   * to get its children into the printed document.
+   */
+  forceVisible?: boolean;
 }) {
   const [visible, setVisible] = useState(() => typeof IntersectionObserver === "undefined");
   const placeholderRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (visible) return;
+    if (visible || forceVisible) return;
     // flushSync only on the print path: beforeprint gives us one synchronous
     // chance to get the rest of the document into the DOM before the browser
     // paginates it. Scrolling has no such deadline and must not force a
@@ -61,8 +69,8 @@ export function DeferUntilVisible({
       window.removeEventListener("beforeprint", mountNow);
       printQuery?.removeEventListener?.("change", onPrintChange);
     };
-  }, [visible, rootMargin]);
+  }, [visible, forceVisible, rootMargin]);
 
-  if (visible) return <>{children}</>;
+  if (visible || forceVisible) return <>{children}</>;
   return <div ref={placeholderRef} style={{ minHeight }} aria-hidden />;
 }
