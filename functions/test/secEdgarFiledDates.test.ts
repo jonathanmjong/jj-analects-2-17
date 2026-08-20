@@ -216,7 +216,11 @@ describe("SEC EDGAR — filing date capture", () => {
     }[]) {
       expect(row.filedAt).toBe("2025-10-31");
       expect(row.filedAt! >= "2025-09-27").toBe(true);
-      expect(row.periodEnd).toBe("2025-12-31");
+      // periodEnd is the filer's REAL period end as of 2026-08-20; this previously
+      // asserted the synthetic `${fy}-12-31`, which was wrong for every filer that
+      // does not close in December.
+      expect(row.periodEnd).toBe("2025-09-27");
+      expect(row.filedAt! >= row.periodEnd).toBe(true);
     }
   });
 

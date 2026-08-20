@@ -37,8 +37,9 @@ export interface StatementPeriodMeta {
    *   dates. Each is the max over its OWN contributing facts.
    * - A point-in-time backtest must gate on this, not on `periodEnd`, and must accept that a row
    *   whose filedAt is null has no defensible as-of date at all.
-   * - `periodEnd` from the SEC provider is a synthetic `${fiscalYear}-12-31`, not the true fiscal
-   *   period end, so filedAt < periodEnd is expected and harmless for non-December filers (Apple's
+   * - `periodEnd` is the filer's REAL fiscal period end (fixed 2026-08-20; it was previously a
+   *   synthetic `${fiscalYear}-12-31`, wrong for the 28% of this universe that does not close in
+   *   December — Apple's FY2025 ended 2025-09-27 and was stored as 2025-12-31).
    *   FY2025 ends 2025-09-27 and was filed 2025-10-30, both inside a periodEnd of 2025-12-31).
    *   Compare filedAt against the real fiscal period end, never against this field.
    *

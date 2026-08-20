@@ -317,6 +317,18 @@ function tagsUsed(facts: CompanyFacts | null, orderedTags: string[], periods: nu
 }
 
 /**
+ * The real fiscal period end, from the same fact that supplied the row's own
+ * values. This used to be fabricated as `${fy}-12-31`, which is simply wrong
+ * for the 28% of this universe that does not close in December — Apple's FY2025
+ * ended 2025-09-27 and was stored as 2025-12-31, an 95-day error. Falls back to
+ * the synthetic date only when no contributing fact carries a usable end, so
+ * the field stays non-null as its type promises.
+ */
+function resolvePeriodEnd(periodEnds: Map<number, string>, fy: number): string {
+  return periodEnds.get(fy) ?? `${fy}-12-31`;
+}
+
+/**
  * The actual fiscal period end date behind each derived fiscal year, same
  * selection rules as annualSeries. Needed wherever a fiscal year label isn't
  * enough on its own — e.g. aligning a cover-page-dated figure to the fiscal
@@ -678,6 +690,7 @@ export function parseAnnualCashFlowStatements(
     annualFiledDatesWithFallback(facts, SHARE_BASED_COMPENSATION_TAGS),
   ]);
 
+  const cashFlowEnds = annualPeriodEnds(facts, ocfTags);
   const years = topYears(ocf, periods);
   return years.map((fy) => {
     const operatingCashFlow = ocf.get(fy) ?? null;
@@ -686,7 +699,7 @@ export function parseAnnualCashFlowStatements(
       periodKey: `${fy}-FY`,
       periodType: "FY" as const,
       fiscalYear: fy,
-      periodEnd: `${fy}-12-31`,
+      periodEnd: resolvePeriodEnd(cashFlowEnds, fy),
       filedAt: filedAt.get(fy) ?? null,
       sourceProvider,
       operatingCashFlow,
@@ -853,6 +866,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
       }
     }
 
+    const incomeEnds = annualPeriodEnds(facts, [...revenueTags, ...NET_INCOME_TAGS]);
     const years = topYears(revenue.size ? revenue : netIncome, periods);
     return years.map((fy) => {
       const revenueVal = revenue.get(fy) ?? null;
@@ -862,7 +876,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
         periodKey: `${fy}-FY`,
         periodType: "FY" as const,
         fiscalYear: fy,
-        periodEnd: `${fy}-12-31`,
+        periodEnd: resolvePeriodEnd(incomeEnds, fy),
         filedAt: filedAt.get(fy) ?? null,
         sourceProvider: this.name,
         revenue: revenueVal,
@@ -945,6 +959,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
       }
     }
 
+    const balanceEnds = annualPeriodEnds(facts, ["Assets", "StockholdersEquity"]);
     const years = topYears(totalAssets.size ? totalAssets : equity, periods);
     return years.map((fy) => {
       const eq = equity.get(fy) ?? null;
@@ -954,7 +969,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
         periodKey: `${fy}-FY`,
         periodType: "FY" as const,
         fiscalYear: fy,
-        periodEnd: `${fy}-12-31`,
+        periodEnd: resolvePeriodEnd(balanceEnds, fy),
         filedAt: filedAt.get(fy) ?? null,
         sourceProvider: this.name,
         cashAndEquivalents: cash.get(fy) ?? null,
