@@ -6,6 +6,7 @@ import { SegmentedTabs, segmentedTabId } from "../ui/SegmentedTabs";
 import { cn, formatPercent } from "../../lib/utils";
 import {
   buildStatementRows,
+  latestFilingInfo,
   groupStatementRows,
   computeYoyChange,
   fiscalYearLabel,
@@ -115,6 +116,7 @@ export function StatementsExplorer({
   const years = useMemo(() => statementYears(periods), [periods]);
   const selectedRow = rows.find((r) => r.key === selectedKey) ?? null;
   const groups = useMemo(() => groupStatementRows(rows), [rows]);
+  const filingInfo = useMemo(() => latestFilingInfo(periods), [periods]);
 
   /**
    * Subtotals carry their components behind a disclosure rather than every line
@@ -287,6 +289,14 @@ export function StatementsExplorer({
 
       <p className="mt-3 text-xs text-muted-foreground">
         Annual 10-K data via SEC EDGAR · derived fields may differ from as-reported filings
+        {filingInfo && (
+          <>
+            {" · "}
+            <span title="A fiscal year can close months before the 10-K carrying it is filed. For years other than the newest, this is the most recent filing that restated the period, not its original 10-K.">
+              latest period ended {filingInfo.periodEnd}, filed {filingInfo.filedAt}
+            </span>
+          </>
+        )}
       </p>
     </div>
   );

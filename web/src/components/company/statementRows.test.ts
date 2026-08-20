@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BALANCE_ROWS, buildStatementRows, CASH_FLOW_ROWS, computeYoyChange, fiscalYearLabel, formatStatementValue, INCOME_ROWS, rowTrend, sparklinePoints, statementYears, type StatementPeriod, groupStatementRows, type StatementRow } from "./statementRows";
+import { BALANCE_ROWS, buildStatementRows, CASH_FLOW_ROWS, computeYoyChange, fiscalYearLabel, formatStatementValue, INCOME_ROWS, rowTrend, sparklinePoints, statementYears, type StatementPeriod, groupStatementRows, type StatementRow, latestFilingInfo } from "./statementRows";
 
 function incomePeriod(fiscalYear: number, fields: Record<string, number | null>): StatementPeriod {
   return { fiscalYear, ...fields } as StatementPeriod;
@@ -289,5 +289,33 @@ describe("groupStatementRows", () => {
     const groups = groupStatementRows(rows);
     const flattened = groups.flatMap((g) => (g.parent ? [g.parent, ...g.children] : g.children));
     expect(flattened.map((r) => r.key)).toEqual(["a", "b", "c", "d", "e"]);
+  });
+});
+
+describe("latestFilingInfo", () => {
+  it("reports the newest fiscal year's period end and filing date", () => {
+    expect(
+      latestFilingInfo([
+        { fiscalYear: 2024, periodEnd: "2024-09-28", filedAt: "2024-11-01" },
+        { fiscalYear: 2025, periodEnd: "2025-09-27", filedAt: "2025-10-31" },
+      ]),
+    ).toEqual({ periodEnd: "2025-09-27", filedAt: "2025-10-31" });
+  });
+
+  it("returns null rather than guessing when the newest year has no filing date", () => {
+    // Documents ingested before filedAt was captured read back undefined.
+    expect(latestFilingInfo([{ fiscalYear: 2025, periodEnd: "2025-09-27" }])).toBeNull();
+    expect(latestFilingInfo([{ fiscalYear: 2025 }])).toBeNull();
+    expect(latestFilingInfo([])).toBeNull();
+  });
+
+  it("ignores older years that do carry dates when the newest does not", () => {
+    // Showing FY2019's filing date under a FY2025 table would misstate currency.
+    expect(
+      latestFilingInfo([
+        { fiscalYear: 2019, periodEnd: "2019-12-31", filedAt: "2020-02-10" },
+        { fiscalYear: 2025, periodEnd: "2025-12-31", filedAt: null },
+      ]),
+    ).toBeNull();
   });
 });

@@ -29,6 +29,9 @@ export interface StatementRow extends RowConfig {
 /** Only the shape these helpers actually need; the three statement interfaces all satisfy it. */
 export interface StatementPeriod {
   fiscalYear: number;
+  /** Present on SEC-sourced rows; optional so older cached documents still type-check. */
+  periodEnd?: string | null;
+  filedAt?: string | null;
 }
 
 /** ebitda and eps are null for every company in this dataset (never populated by either live
@@ -217,4 +220,22 @@ export function groupStatementRows(rows: StatementRow[]): StatementGroup[] {
     groups[groups.length - 1].children.push(row);
   }
   return groups;
+}
+
+/**
+ * The filing date of the most recent period on show, and the period it covers.
+ * Answers "how current is this?" — a fiscal year can close months before the
+ * 10-K carrying it is filed, and for anything but the newest year the date is
+ * the most recent filing that RESTATED that period rather than its original
+ * 10-K (see StatementPeriodMeta.filedAt).
+ */
+export function latestFilingInfo(periods: StatementPeriod[]): { periodEnd: string; filedAt: string } | null {
+  // The NEWEST year decides, and it either has both fields or we say nothing.
+  // Skipping incomplete years and falling back to an older one would print an
+  // ancient filing date beneath a current table, misstating how fresh the data is.
+  let newest: StatementPeriod | null = null;
+  for (const p of periods) {
+    if (!newest || p.fiscalYear > newest.fiscalYear) newest = p;
+  }
+  return newest?.filedAt && newest.periodEnd ? { periodEnd: newest.periodEnd, filedAt: newest.filedAt } : null;
 }
