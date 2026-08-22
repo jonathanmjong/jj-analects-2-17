@@ -79,7 +79,20 @@ export function PriceHistoryChart({ points }: { points: PriceHistoryPoint[] }) {
   const hasMa200 = filtered.some((p) => p.ma200 !== null);
 
   if (points.length === 0) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">No price history available for this company yet.</p>;
+    // Said plainly rather than "not available yet": the free daily-bars source
+    // rate-limits automated requests and has done for months, so for almost
+    // every company this is a standing state, not a gap that is about to fill.
+    // The headline price and market cap come from a different path and are
+    // current, which is the thing a reader would otherwise doubt.
+    return (
+      <div className="py-8 text-center text-sm text-muted-foreground">
+        <p>No daily price series for this company.</p>
+        <p className="mt-1 text-xs">
+          The free price source rate-limits automated requests, so the chart is unavailable. The price and market cap
+          shown above are current and come from live quotes or the latest SEC filing.
+        </p>
+      </div>
+    );
   }
 
   return (

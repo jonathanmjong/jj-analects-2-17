@@ -67,6 +67,16 @@ Running list of known open items. Not a full backlog — just things worth not f
   lockfile, so putting a linter there both broke the deploy and would have shipped dev tooling
   into the production install.
 
+- **Price history is not merely stale — it is absent for ~99.5% of the universe (measured
+  2026-08-22).** Of 200 companies sampled, **199 have no priceHistory document at all**; the one
+  that does is 22 days old. The 4-hourly job has been 429ing on every ticker for months, so it
+  has essentially never succeeded. Consequences, all now understood rather than assumed:
+  the company page's Price History chart is empty for nearly every company (its empty state now
+  says why, instead of "not available yet"); `latest.momentum` is null universe-wide, which is
+  harmless because momentum defaults to 0% category weight AND the coverage denominator only
+  counts weighted categories, so it neither moves scores nor drags coverage down. `marketData`
+  is NOT a substitute: it holds ~24 points across 17 months for AAPL, not a daily series,
+  because it only records the days a live quote actually succeeded.
 - **Daily price history: abandoned as a paid/infra problem, routed around for free (2026-08-14).**
   Retried the VPC connector: the 2026-08-05 `ZONE_RESOURCE_POOL_EXHAUSTED` capacity problem is
   GONE, but both attempts failed with "connector failed to get healthy" — root cause found:
