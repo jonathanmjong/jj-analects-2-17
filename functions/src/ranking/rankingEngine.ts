@@ -37,7 +37,7 @@ async function loadUniverseRawScores(tickers: string[], sectorByTicker: Map<stri
  * (merged into the existing rawValue/isMissing fields) — this is what lets
  * the Company page show percentile/rank per metric per year, not just the
  * raw value. Only the scheduled jobs set this to true; the on-demand
- * custom-weights preview (recomputeRankingsWithConfig) leaves it false
+ * custom-weights preview, which now runs client-side, leaves it false
  * since that's an ephemeral "what if" computation, not the system of record.
  */
 export async function computeRankings(

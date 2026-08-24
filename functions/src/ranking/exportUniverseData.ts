@@ -16,7 +16,7 @@ const EXPORT_PATH = "public/ranking-universe.json.gz";
  * Writes a compact bulk export of every company's raw (pre-normalization)
  * metric values to Cloud Storage, so the Rankings page's live weight sliders
  * can recompute the whole universe's scores instantly in the browser
- * instead of round-tripping to recomputeRankingsWithConfig (~25s at current
+ * instead of round-tripping to a Cloud Function (~25s at current
  * universe scale). Uses a shared ordered metricKeys list + numeric arrays
  * (instead of repeating key names per company/year) to keep the payload
  * small, then gzips it — web/src/lib/clientRankingEngine.ts is the

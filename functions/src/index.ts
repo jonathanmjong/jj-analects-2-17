@@ -11,7 +11,7 @@ export { valuationHistoryRefresh } from "./scheduled/valuationHistoryRefresh.js"
 export { sp500MembershipRefresh } from "./scheduled/sp500MembershipRefresh.js";
 export { expandUniverse } from "./scheduled/expandUniverse.js";
 export { cleanupUniverse } from "./scheduled/cleanupUniverse.js";
-export { recomputeRankingsDaily, recomputeRankingsWithConfig } from "./scheduled/recomputeRankings.js";
+export { recomputeRankingsDaily } from "./scheduled/recomputeRankings.js";
 
 export { bootstrapSeedUniverse, seedMetricDefinitions } from "./admin/adminOps.js";
 
