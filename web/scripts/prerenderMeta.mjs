@@ -33,6 +33,23 @@ const DIST = join(WEB_ROOT, "dist");
 const SITE_URL = "https://analects2.com";
 
 /**
+ * Firebase Hosting 301-redirects a clean directory match ("/login") to its
+ * trailing-slash form ("/login/") before serving that directory's index.html
+ * — confirmed against production (curl -D-, 2026-09-06): /login, /preview,
+ * and /vs/<slug> all redirect this way; only the wildcard-rewrite-served SPA
+ * routes (e.g. /rankings) and the root "/" itself do not, since a rewrite
+ * serves alternate content at the same URL rather than resolving a directory.
+ * A canonical/sitemap URL one redirect hop away from itself is the same
+ * "conflicting signal" class of bug this whole change exists to fix, so the
+ * URL baked into meta tags and the sitemap must be where Firebase actually
+ * finalizes, not the path used to reach it on disk (dist/login/index.html
+ * still has no trailing slash — that part is a filesystem path, not a URL).
+ */
+export function canonicalUrl(path) {
+  return path.endsWith("/") ? `${SITE_URL}${path}` : `${SITE_URL}${path}/`;
+}
+
+/**
  * One exact tag-for-tag replacement. Throws if the target isn't found in the
  * template exactly once — matching on the FULL tag (not a content fragment)
  * so tags that happen to share the same text, like og:description and
@@ -66,7 +83,7 @@ const esc = (s) => s.replace(/&/g, "&amp;");
  * copies once could.
  */
 export function renderPageHtml(templateHtml, { path, title, description }) {
-  const url = `${SITE_URL}${path}`;
+  const url = canonicalUrl(path);
   let html = templateHtml;
 
   html = replaceOnce(
@@ -154,7 +171,7 @@ export function buildSitemap(routes) {
   const body = urls
     .map(
       (r) =>
-        `  <url>\n    <loc>${SITE_URL}${r.path}</loc>\n    <changefreq>${r.changefreq}</changefreq>\n    <priority>${r.priority}</priority>\n  </url>`,
+        `  <url>\n    <loc>${canonicalUrl(r.path)}</loc>\n    <changefreq>${r.changefreq}</changefreq>\n    <priority>${r.priority}</priority>\n  </url>`,
     )
     .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`;
@@ -180,7 +197,7 @@ export function run() {
     const outDir = join(DIST, route.path);
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, "index.html"), html);
-    console.log(`prerenderMeta: wrote ${route.path}/index.html (canonical ${SITE_URL}${route.path})`);
+    console.log(`prerenderMeta: wrote ${route.path}/index.html (canonical ${canonicalUrl(route.path)})`);
   }
 
   const sitemap = buildSitemap(routes);

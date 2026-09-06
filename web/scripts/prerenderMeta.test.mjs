@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { replaceOnce, stripHomepageStructuredData, renderPageHtml, buildRouteList, buildSitemap } from "./prerenderMeta.mjs";
+import { replaceOnce, stripHomepageStructuredData, renderPageHtml, buildRouteList, buildSitemap, canonicalUrl } from "./prerenderMeta.mjs";
 
 const TEMPLATE = `<!doctype html>
 <html><head>
@@ -47,7 +47,7 @@ describe("stripHomepageStructuredData", () => {
 describe("renderPageHtml", () => {
   it("gives the page its own self-referencing canonical, not the homepage's", () => {
     const html = renderPageHtml(TEMPLATE, { path: "/login", title: "Sign In | Analects 2.17", description: "Sign in." });
-    expect(html).toContain('<link rel="canonical" href="https://analects2.com/login" />');
+    expect(html).toContain('<link rel="canonical" href="https://analects2.com/login/" />');
     expect(html).not.toContain('href="https://analects2.com/"');
   });
 
@@ -114,5 +114,19 @@ describe("buildSitemap", () => {
     const opens = xml.match(/<url>/g)?.length ?? 0;
     const closes = xml.match(/<\/url>/g)?.length ?? 0;
     expect(opens).toBe(closes);
+  });
+});
+
+describe("canonicalUrl", () => {
+  it("appends a trailing slash for a directory-matched route", () => {
+    // Firebase Hosting 301s a clean directory match ("/login") to "/login/"
+    // before serving it (confirmed against production) — the canonical must
+    // point at the URL Firebase actually settles on, not one hop before it.
+    expect(canonicalUrl("/login")).toBe("https://analects2.com/login/");
+    expect(canonicalUrl("/vs/finviz")).toBe("https://analects2.com/vs/finviz/");
+  });
+
+  it("does not double the slash on the homepage, which is already \"/\"", () => {
+    expect(canonicalUrl("/")).toBe("https://analects2.com/");
   });
 });
