@@ -4,6 +4,7 @@ import { Button } from "../components/ui/Button";
 import { MarketingHeader, MarketingFooter } from "../components/landing/MarketingChrome";
 import { HeroPreviewMockup } from "../components/landing/Mockups";
 import { useDocumentMeta } from "../hooks/useDocumentMeta";
+import competitorsData from "../data/competitors.json";
 
 interface ComparisonRow {
   feature: string;
@@ -18,36 +19,7 @@ interface CompetitorConfig {
   rows: ComparisonRow[];
 }
 
-const COMPETITORS: Record<string, CompetitorConfig> = {
-  finviz: {
-    slug: "finviz",
-    name: "Finviz",
-    intro:
-      "Finviz is a well-known screener for filtering stocks by criteria. Analects 2.17 takes a different approach: instead of manually filtering, every mid and large-cap company is pre-scored and pre-ranked on ~70 fundamental metrics, and you can reweight the whole model live.",
-    rows: [
-      { feature: "Price", us: "$2/month", them: "Free tier available; paid tiers priced separately — check their site for current pricing" },
-      { feature: "Live weight sliders (whole universe re-ranks instantly)", us: "Yes — per category and per metric", them: "Screener/filter-based; not a live-reweighted composite score" },
-      { feature: "Cross-sectional percentile/z-score scoring across ~70 metrics", us: "Yes, every company scored the same way", them: "Filter on individual metrics; no single blended score" },
-      { feature: "Universe", us: "Every mid & large-cap company, pre-ranked", them: "Screen on demand across a broader universe including small caps" },
-      { feature: "Export", us: "CSV / JSON / XLSX", them: "CSV export available on paid tiers" },
-      { feature: "Trial", us: "7 days, full access, no card tricks", them: "Free tier with limited features" },
-    ],
-  },
-  "stock-rover": {
-    slug: "stock-rover",
-    name: "Stock Rover",
-    intro:
-      "Stock Rover is a broader research and portfolio-tracking platform. Analects 2.17 is narrower and sharper by design: one ranked list, one score, and a live model you can reweight in seconds — no portfolio import required to get value from it.",
-    rows: [
-      { feature: "Price", us: "$2/month", them: "Premium tiers priced significantly higher — check their site for current pricing" },
-      { feature: "Live weight sliders (whole universe re-ranks instantly)", us: "Yes — per category and per metric", them: "Custom scoring exists but works differently, not a live cross-sectional re-rank" },
-      { feature: "Setup", us: "Pre-built ranking, useful immediately", them: "More configuration and portfolio-management depth — steeper learning curve" },
-      { feature: "Focus", us: "Ranking + explainability: percentile and rank shown per metric, per company", them: "Broader research, screening, and portfolio-tracking platform" },
-      { feature: "Export", us: "CSV / JSON / XLSX", them: "Export available on paid tiers" },
-      { feature: "Trial", us: "7 days, full access", them: "Free trial available (shorter, fewer features)" },
-    ],
-  },
-};
+const COMPETITORS: Record<string, CompetitorConfig> = competitorsData;
 
 function ComparisonTable({ config }: { config: CompetitorConfig }) {
   return (
