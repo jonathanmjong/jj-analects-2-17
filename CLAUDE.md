@@ -152,6 +152,34 @@ after rotating a secret), use `gh run rerun <run-id>` on the last successful run
   Auth's authorized domains list (or Google Sign-In breaks on it) and to any hardcoded
   checkout/portal return URLs in Stripe.
 
+- **Removing a deployed Cloud Function from source aborts the whole CI/CD deploy**, non-interactively,
+  with no partial-success fallback. `firebase deploy` refuses to delete an orphaned function unless
+  run interactively, so it prints `The following functions are found in your project but do not
+  exist in your local source code... Aborting because deletion cannot proceed in non-interactive
+  mode` and the Firebase deploy step fails outright — hosting/rules may have already deployed by
+  that point, leaving production briefly mixed (new frontend, old functions bundle, and the
+  supposedly-removed function still live and still reachable). Fix: delete it manually
+  (`gcloud functions delete <name> --region us-central1 --project jj-analects-2-17 --quiet`,
+  or the `firebase functions:delete` command the error message itself prints), verify with
+  `gcloud functions describe <name>` (expect 404), then re-run the failed CI job so the rest of
+  the functions bundle actually ships.
+- **Don't add lint tooling to `functions/package.json`.** Cloud Build installs `functions/` in
+  isolation against its own standalone `functions/package-lock.json` (see the lockfile note
+  above), so a devDependency added there without regenerating that lockfile breaks `npm ci` on
+  deploy with `Missing: <package>@<version> from lock file` — and shipping a linter into the
+  *deployed* functions artifact is the wrong outcome even if the lockfile were regenerated. Lint
+  tooling (oxlint) lives as a single root devDependency instead, run once across
+  `web/src functions/src shared/src` — linting is a repo concern, not a per-workspace deploy
+  dependency.
+- **Firebase Hosting 301-redirects a clean directory-index match to its trailing-slash form**
+  before serving it: a request to `/login` (matching a literal `dist/login/index.html`) redirects
+  to `/login/` first, THEN serves that file — confirmed via `curl -D-`. This only happens for a
+  literal static-file/directory match; a path served by the `"**" -> "/index.html"` SPA rewrite
+  (no matching file on disk) returns the content directly with no redirect. Matters for anything
+  that bakes an absolute URL into per-route HTML (canonical tags, OG `url`, a generated
+  sitemap) — point it at the trailing-slash form for any prerendered subpage, or the page's own
+  declared canonical will contradict the redirect that got the visitor there.
+
 ## Conventions
 
 - No comments unless they explain a non-obvious *why* (a workaround, a hidden constraint, a subtle
