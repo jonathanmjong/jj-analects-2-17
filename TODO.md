@@ -37,8 +37,8 @@ Running list of known open items. Not a full backlog — just things worth not f
     genuinely report little D&A). The FFO metrics only need the REIT figure, so this is mostly
     fine, but a filer using a tag outside `DepreciationDepletionAndAmortization` /
     `DepreciationAndAmortization` silently yields no FFO for that company.
-  - **Recommended but not done:** store a `netIncomeSourceTag` on `IncomeStatement` so the UI
-    can flag NCI-inclusive figures and an audit can find them without re-fetching EDGAR.
+  - `netIncomeSourceTag` now ships on `IncomeStatement` (see Done below), so an NCI-inclusive
+    figure is identifiable per year without re-fetching EDGAR.
 - **Price history is absent for ~99% of the universe, and free options are exhausted.**
   Measured 2026-08-22: of 200 companies sampled, 199 had no `priceHistory` document at all (the
   4-hourly ingestion job has been 429ing on every ticker for months, essentially never
@@ -76,6 +76,16 @@ Running list of known open items. Not a full backlog — just things worth not f
 
 ## Done (kept for context, remove once stale)
 
+- **Net income basis is now recorded per year, not just logged (2026-10-07).**
+  `IncomeStatement.netIncomeSourceTag` carries which of `NET_INCOME_TAGS` supplied that fiscal
+  year's figure, resolved by the same per-period precedence the value itself goes through — so a
+  filer whose history straddles two bases (the EXC/VTR dropoff shape) shows the real tag on each
+  year rather than one company-level label. The statements table flags only `ProfitLoss`-sourced
+  cells, the one basis that includes noncontrolling interests;
+  `NetIncomeLossAvailableToCommonStockholdersBasic` is a different but not misleading basis
+  (market cap prices common equity) and is deliberately unflagged. Optional on the type because
+  pre-existing Firestore documents lack the key until the nightly ingestion rewrites them —
+  `set(stmt, { merge: true })` backfills it with no migration.
 - **Ingestion tag-coverage fixes (2026-08-16 through 2026-08-19), holding steady 3+ weeks later
   (checked 2026-09-10, 196 sampled):** netIncome null 3%→**1%**, totalDebt null 51%→**21%**,
   grossProfit null 58%→**36%**, costOfRevenue null (was hardcoded null for everyone)→**38%**,

@@ -11,6 +11,7 @@ import {
   computeYoyChange,
   fiscalYearLabel,
   formatStatementValue,
+  isNciInclusive,
   rowTrend,
   sparklinePoints,
   statementYears,
@@ -117,6 +118,7 @@ export function StatementsExplorer({
   const selectedRow = rows.find((r) => r.key === selectedKey) ?? null;
   const groups = useMemo(() => groupStatementRows(rows), [rows]);
   const filingInfo = useMemo(() => latestFilingInfo(periods), [periods]);
+  const hasNciInclusiveCell = rows.some((row) => row.cells.some(isNciInclusive));
 
   /**
    * Subtotals carry their components behind a disclosure rather than every line
@@ -208,6 +210,14 @@ export function StatementsExplorer({
             )}
           >
             {formatStatementValue(cell.value, row.unit)}
+            {isNciInclusive(cell) && (
+              <span
+                title="Includes noncontrolling interests (reported under the ProfitLoss tag, not NetIncomeLoss) — overstates what's attributable to this company's own shareholders."
+                className="ml-0.5 text-muted-foreground"
+              >
+                *
+              </span>
+            )}
           </td>
         ))}
       </tr>
@@ -289,6 +299,7 @@ export function StatementsExplorer({
 
       <p className="mt-3 text-xs text-muted-foreground">
         Annual 10-K data via SEC EDGAR · derived fields may differ from as-reported filings
+        {hasNciInclusiveCell && <> · * includes noncontrolling interests</>}
         {filingInfo && (
           <>
             {" · "}

@@ -303,6 +303,23 @@ const BROADER_THAN_LONG_TERM_DEBT_TAGS = new Set([
 ]);
 
 /**
+ * The tag that supplied each derived fiscal year's value from annualSeriesWithFallback — same
+ * fiscal-year assignment and trimming rules as seriesByFiscalYear, so a year's tag always matches
+ * the very fact whose number landed on that year's statement row.
+ */
+function tagsByFiscalYear(
+  facts: CompanyFacts | null,
+  orderedTags: string[],
+  periods: number,
+): Map<number, string> {
+  const out = new Map<number, string>();
+  for (const { fact, tag } of annualFactsByEndWithFallback(facts, orderedTags)) {
+    out.set(new Date(fact.end).getUTCFullYear(), tag);
+  }
+  return new Map([...out.entries()].sort((a, b) => b[0] - a[0]).slice(0, periods));
+}
+
+/**
  * Distinct tags that supplied a value within the same most-recent-`periods` window
  * annualSeriesWithFallback returns, in precedence order. Provenance for logging only — a filer that
  * used a fallback only in years that got trimmed away is not interesting.
@@ -839,6 +856,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
     const pretax = annualSeries(facts, pretaxTags, periods);
     const tax = annualSeries(facts, taxTags, periods);
     const netIncome = annualSeriesWithFallback(facts, NET_INCOME_TAGS, periods);
+    const netIncomeSourceTag = tagsByFiscalYear(facts, NET_INCOME_TAGS, periods);
     const epsDiluted = annualSeries(facts, epsDilutedTags, periods);
     const dilutedShares = annualSeries(facts, dilutedSharesTags, periods);
 
@@ -857,8 +875,9 @@ export class SecEdgarProvider extends FinancialDataProvider {
     ]);
 
     // Net income is the most load-bearing field in the dataset (P/E, every margin, growth CAGRs,
-    // F-Score). Nothing records WHICH basis it came from — see the IncomeStatement shape — so at
-    // least leave the provenance in the logs for the ~10% of filers that need a fallback.
+    // F-Score). The per-year basis is recorded on the statement itself (netIncomeSourceTag) — this
+    // is just a log line for the ~10% of filers that need a fallback, so it shows up without
+    // querying Firestore.
     if (ticker) {
       const netIncomeTags = tagsUsed(facts, NET_INCOME_TAGS, periods);
       if (netIncomeTags.some((tag) => tag !== NET_INCOME_TAGS[0])) {
@@ -896,6 +915,7 @@ export class SecEdgarProvider extends FinancialDataProvider {
         pretaxIncome: pretax.get(fy) ?? null,
         incomeTaxExpense: tax.get(fy) ?? null,
         netIncome: netIncome.get(fy) ?? null,
+        netIncomeSourceTag: netIncomeSourceTag.get(fy) ?? null,
         eps: null,
         epsDiluted: epsDiluted.get(fy) ?? null,
         sharesOutstandingDiluted: dilutedShares.get(fy) ?? null,

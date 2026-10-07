@@ -15,15 +15,30 @@ export interface RowConfig {
    * EDGAR provider derives totalDebt straight from long-term debt, so the two rows are the same
    * numbers under two names for most companies. */
   dedupeAgainst?: string;
+  /** Name of a sibling string field on the period record to surface per-cell as `StatementCell.sourceTag`.
+   * Only wired for netIncome — it is the one line whose accounting basis genuinely varies by filer
+   * (see IncomeStatement.netIncomeSourceTag) and is worth a provenance note in the UI. */
+  sourceTagField?: string;
 }
 
 export interface StatementCell {
   fiscalYear: number;
   value: number | null;
+  sourceTag?: string | null;
 }
 
 export interface StatementRow extends RowConfig {
   cells: StatementCell[];
+}
+
+/** The one NET_INCOME_TAGS entry (SecEdgarProvider.ts) that includes noncontrolling interests —
+ * overstates what's attributable to this company's own shareholders. The other fallback tag,
+ * NetIncomeLossAvailableToCommonStockholdersBasic, is a different but not misleading basis and
+ * isn't flagged. */
+const NCI_INCLUSIVE_SOURCE_TAG = "ProfitLoss";
+
+export function isNciInclusive(cell: StatementCell): boolean {
+  return cell.sourceTag === NCI_INCLUSIVE_SOURCE_TAG;
 }
 
 /** Only the shape these helpers actually need; the three statement interfaces all satisfy it. */
@@ -46,7 +61,7 @@ export const INCOME_ROWS: RowConfig[] = [
   { key: "interestExpense", label: "Interest Expense", indent: 1, unit: "currency" },
   { key: "pretaxIncome", label: "Pretax Income", indent: 0, unit: "currency" },
   { key: "incomeTaxExpense", label: "Income Tax Expense", indent: 1, unit: "currency" },
-  { key: "netIncome", label: "Net Income", indent: 0, unit: "currency" },
+  { key: "netIncome", label: "Net Income", indent: 0, unit: "currency", sourceTagField: "netIncomeSourceTag" },
   { key: "epsDiluted", label: "EPS (diluted)", indent: 1, unit: "perShare" },
   { key: "sharesOutstandingDiluted", label: "Diluted Shares", indent: 1, unit: "shares" },
 ];
@@ -100,6 +115,11 @@ function numericField(period: StatementPeriod, key: string): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function stringField(period: StatementPeriod, key: string): string | null {
+  const value = (period as unknown as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : null;
+}
+
 /** Fiscal years present in the data, ascending so the table reads left-to-right chronologically. */
 export function statementYears(periods: StatementPeriod[]): number[] {
   return [...new Set(periods.map((p) => p.fiscalYear))].sort((a, b) => a - b);
@@ -126,7 +146,11 @@ export function buildStatementRows(periods: StatementPeriod[], configs: RowConfi
   for (const config of configs) {
     const cells = years.map((fiscalYear) => {
       const period = byYear.get(fiscalYear);
-      return { fiscalYear, value: period ? numericField(period, config.key) : null };
+      return {
+        fiscalYear,
+        value: period ? numericField(period, config.key) : null,
+        sourceTag: period && config.sourceTagField ? stringField(period, config.sourceTagField) : undefined,
+      };
     });
     if (cells.every((c) => c.value === null)) continue;
     if (config.dedupeAgainst) {

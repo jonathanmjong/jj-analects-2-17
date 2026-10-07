@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BALANCE_ROWS, buildStatementRows, CASH_FLOW_ROWS, computeYoyChange, fiscalYearLabel, formatStatementValue, INCOME_ROWS, rowTrend, sparklinePoints, statementYears, type StatementPeriod, groupStatementRows, type StatementRow, latestFilingInfo } from "./statementRows";
+import { BALANCE_ROWS, buildStatementRows, CASH_FLOW_ROWS, computeYoyChange, fiscalYearLabel, formatStatementValue, INCOME_ROWS, isNciInclusive, rowTrend, sparklinePoints, statementYears, type StatementPeriod, groupStatementRows, type StatementRow, latestFilingInfo } from "./statementRows";
 
 function incomePeriod(fiscalYear: number, fields: Record<string, number | null>): StatementPeriod {
   return { fiscalYear, ...fields } as StatementPeriod;
@@ -31,6 +31,49 @@ describe("row configs", () => {
     const keys = CASH_FLOW_ROWS.map((r) => r.key);
     expect(keys.indexOf("shareBasedCompensation")).toBe(keys.indexOf("depreciationAndAmortization") + 1);
     expect(keys.indexOf("shareBasedCompensation")).toBeLessThan(keys.indexOf("freeCashFlow"));
+  });
+});
+
+describe("net income source tag", () => {
+  const withTag = (fiscalYear: number, netIncome: number, netIncomeSourceTag: string | null): StatementPeriod =>
+    ({ fiscalYear, netIncome, netIncomeSourceTag }) as StatementPeriod;
+
+  const netIncomeCells = (periods: StatementPeriod[]) =>
+    buildStatementRows(periods, INCOME_ROWS).find((r) => r.key === "netIncome")?.cells ?? [];
+
+  it("flags only the NCI-inclusive basis, per year", () => {
+    // A filer that drops off NetIncomeLoss mid-history ends up with its recent years on the
+    // NCI-inclusive basis and its older ones on the parent-only basis, so the flag has to be
+    // per-cell. NetIncomeLossAvailableToCommonStockholdersBasic is a different basis but not a
+    // misleading one — market cap prices common equity — so it is deliberately not flagged.
+    const cells = netIncomeCells([
+      withTag(2023, 1_100, "NetIncomeLoss"),
+      withTag(2024, 1_200, "NetIncomeLossAvailableToCommonStockholdersBasic"),
+      withTag(2025, 1_800, "ProfitLoss"),
+    ]);
+
+    expect(cells.map((c) => isNciInclusive(c))).toEqual([false, false, true]);
+  });
+
+  it("flags nothing for a statement written before the field existed", () => {
+    // Pre-2026-09 documents have no netIncomeSourceTag key at all. Absent must read as "basis
+    // unknown", never as a flag.
+    const cells = netIncomeCells([
+      { fiscalYear: 2024, netIncome: 30 } as StatementPeriod,
+      { fiscalYear: 2025, netIncome: 40 } as StatementPeriod,
+    ]);
+
+    expect(cells).toHaveLength(2);
+    expect(cells.some((c) => isNciInclusive(c))).toBe(false);
+  });
+
+  it("carries no source tag on rows that have no sourceTagField", () => {
+    const revenue = buildStatementRows(
+      [{ fiscalYear: 2025, revenue: 100, netIncome: 10, netIncomeSourceTag: "ProfitLoss" } as StatementPeriod],
+      INCOME_ROWS,
+    ).find((r) => r.key === "revenue");
+
+    expect(revenue?.cells.every((c) => c.sourceTag === undefined)).toBe(true);
   });
 });
 

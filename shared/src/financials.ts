@@ -68,6 +68,17 @@ export interface IncomeStatement extends StatementPeriodMeta {
   eps: number | null;
   epsDiluted: number | null;
   sharesOutstandingDiluted: number | null;
+  /**
+   * The XBRL tag `netIncome` was resolved from — one of NET_INCOME_TAGS in SecEdgarProvider.ts
+   * (`NetIncomeLoss`, `NetIncomeLossAvailableToCommonStockholdersBasic`, or `ProfitLoss`). Only
+   * `ProfitLoss` includes noncontrolling interests, i.e. overstates what's attributable to this
+   * company's own shareholders — that's the one worth flagging in the UI.
+   *
+   * Optional for the same reason `depreciationAndAmortization` is: statements written before this
+   * field existed (2026-09) lack the key entirely, and a non-SEC provider never sets it. Consumers
+   * must treat undefined and null identically.
+   */
+  netIncomeSourceTag?: string | null;
 }
 
 /** Firestore subcollection: companies/{ticker}/balanceSheets/{periodKey} */

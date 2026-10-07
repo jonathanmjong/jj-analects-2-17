@@ -42,7 +42,11 @@ const provider = new SecEdgarProvider();
 /** extractIncomeStatements is private; getCompanyBundle/getIncomeStatements are the HTTP entry points. */
 const incomeFor = (facts: CompanyFacts, periods = 5) =>
   (provider as unknown as {
-    extractIncomeStatements(f: CompanyFacts, p: number, t?: string): { fiscalYear: number; netIncome: number | null }[];
+    extractIncomeStatements(
+      f: CompanyFacts,
+      p: number,
+      t?: string,
+    ): { fiscalYear: number; netIncome: number | null; netIncomeSourceTag?: string | null }[];
   }).extractIncomeStatements(facts, periods);
 
 const netIncomeByYear = (facts: CompanyFacts, periods = 5) =>
@@ -202,6 +206,45 @@ describe("SEC EDGAR — net income tag precedence", () => {
     );
 
     expect(byYear).toEqual({ 2025: 3_048_269_000 });
+  });
+
+  it("records which tag supplied each year, per year, not per company", () => {
+    // Same EXC/VTR shape as the basis test above: the point of storing this is that an audit can
+    // see a filer's history sits on two different bases without re-fetching EDGAR, so a single
+    // company-level tag would be the wrong thing to record.
+    const tagByYear = Object.fromEntries(
+      incomeFor(
+        companyFacts({
+          ...revenueFacts("2023-12-31", "2024-12-31", "2025-12-31"),
+          NetIncomeLoss: [durationFact("2023-12-31", 1_100)],
+          NetIncomeLossAvailableToCommonStockholdersBasic: [durationFact("2024-12-31", 1_200)],
+          ProfitLoss: [
+            durationFact("2023-12-31", 1_600),
+            durationFact("2024-12-31", 1_700),
+            durationFact("2025-12-31", 1_800),
+          ],
+        }),
+      ).map((s) => [s.fiscalYear, s.netIncomeSourceTag]),
+    );
+
+    expect(tagByYear).toEqual({
+      2023: "NetIncomeLoss",
+      2024: "NetIncomeLossAvailableToCommonStockholdersBasic",
+      2025: "ProfitLoss",
+    });
+  });
+
+  it("leaves the source tag null for a year with no qualifying fact", () => {
+    // Null netIncome and a null tag have to travel together — a tag standing alone would assert a
+    // basis for a figure that does not exist.
+    const [, older] = incomeFor(
+      companyFacts({
+        ...revenueFacts("2024-12-31", "2025-12-31"),
+        NetIncomeLoss: [durationFact("2025-12-31", 3_328_231_000)],
+      }),
+    );
+
+    expect(older).toMatchObject({ fiscalYear: 2024, netIncome: null, netIncomeSourceTag: null });
   });
 
   it("leaves the rest of the income statement untouched", () => {
