@@ -33,10 +33,11 @@ Running list of known open items. Not a full backlog — just things worth not f
     looks: 24% universe-wide but 76% of that is Financials, where no operating-income subtotal
     exists by construction and EV/EBIT is already sector-gated off there anyway — 9% excluding
     Financials and Real Estate.
-  - **D&A coverage is ~78% universe-wide** (Real Estate ~88%, Financials ~58%, expected — banks
-    genuinely report little D&A). The FFO metrics only need the REIT figure, so this is mostly
-    fine, but a filer using a tag outside `DepreciationDepletionAndAmortization` /
-    `DepreciationAndAmortization` silently yields no FFO for that company.
+  - **D&A coverage was ~78% universe-wide as of 2026-09-10** (Real Estate ~88%, Financials ~58%,
+    expected — banks genuinely report little D&A). Two more fallback tags shipped 2026-10-16 (see
+    Done below) targeting the REIT gap specifically, since that's the only sector where this field
+    feeds a metric (approximate FFO) — not yet re-measured against production; the next health
+    check should confirm the new Real Estate percentage.
   - `netIncomeSourceTag` now ships on `IncomeStatement` (see Done below), so an NCI-inclusive
     figure is identifiable per year without re-fetching EDGAR.
 - **Price history is absent for ~99% of the universe, and free options are exhausted.**
@@ -76,6 +77,22 @@ Running list of known open items. Not a full backlog — just things worth not f
 
 ## Done (kept for context, remove once stale)
 
+- **D&A tag precedence extended to two more fallback tags (2026-10-16), targeting the REIT gap
+  specifically.** `depreciationAndAmortization` only feeds one thing, approximate FFO
+  (`ffo_yield` / `price_to_ffo`), and those are sector-restricted to Real Estate — so a Financials
+  gap (confirmed live on EDGAR: JPM, Citigroup and American Express report neither
+  `DepreciationDepletionAndAmortization` nor `DepreciationAndAmortization` at all) has zero scoring
+  impact and wasn't worth chasing on its own. The REIT gap does matter: AvalonBay and Equity
+  Residential (large apartment REITs) report neither primary tag either, only bare `Depreciation`
+  — and Crown Castle reports only `DepreciationAmortizationAndAccretionNet`. Added both as ranked
+  fallbacks (`DepreciationAmortizationAndAccretionNet` before `Depreciation`, broader-first per this
+  file's usual rule), which incidentally also recovers JPM/Citigroup/AmEx for the cash-flow
+  statement display even though it changes no metric for them. Verified AvalonBay/Equity
+  Residential have no material intangible-amortization line being left out (EQR's own
+  `AmortizationOfIntangibleAssets`, when it still tagged one at all, ran ~$3-4M against
+  ~$800-900M of `Depreciation` — well under rounding), and that GE — which has tagged all four
+  candidate concepts across its history at materially different values — still resolves to the
+  broadest one it reports. Not yet re-measured against production.
 - **Net income basis is now recorded per year, not just logged (2026-10-07).**
   `IncomeStatement.netIncomeSourceTag` carries which of `NET_INCOME_TAGS` supplied that fiscal
   year's figure, resolved by the same per-period precedence the value itself goes through — so a

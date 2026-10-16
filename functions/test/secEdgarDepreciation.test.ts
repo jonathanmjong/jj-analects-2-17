@@ -3,12 +3,11 @@ import type { CompanyFacts, XbrlFact } from "../src/providers/SecEdgarProvider.j
 import { DEPRECIATION_AND_AMORTIZATION_TAGS, parseAnnualCashFlowStatements } from "../src/providers/SecEdgarProvider.js";
 
 /**
- * D&A is the add-back that turns net income into (approximate) FFO, and REIT filers do not agree
- * on which XBRL tag carries it — verified live against EDGAR:
- *   - SPG (CIK 0001063761) reports only `DepreciationAndAmortization`;
- *     `DepreciationDepletionAndAmortization` 404s for that filer.
- *   - Vornado (CIK 0000899689) reports BOTH, at different values.
- * So the merge has to cover both tags AND have a deterministic winner when both are present.
+ * D&A is the add-back that turns net income into (approximate) FFO, and filers do not agree on
+ * which XBRL tag carries it — verified live against EDGAR, see DEPRECIATION_AND_AMORTIZATION_TAGS
+ * for the full evidence (SPG/Vornado for the original two tags; JPM/Citigroup/AmEx/Crown Castle
+ * and AvalonBay/Equity Residential for the two fallback tags added 2026-10). So the merge has to
+ * cover all four tags AND have a deterministic winner whenever more than one is present.
  */
 
 const FILED = "2026-02-20";
@@ -151,6 +150,55 @@ describe("SEC EDGAR — depreciation & amortization tag precedence", () => {
     expect(DEPRECIATION_AND_AMORTIZATION_TAGS).toEqual([
       "DepreciationDepletionAndAmortization",
       "DepreciationAndAmortization",
+      "DepreciationAmortizationAndAccretionNet",
+      "Depreciation",
     ]);
+  });
+
+  it("falls back to DepreciationAmortizationAndAccretionNet when neither primary tag exists (the JPM/CCI case)", () => {
+    // JPMorgan, Citigroup and American Express report no DepreciationDepletionAndAmortization or
+    // DepreciationAndAmortization at all, only this. Crown Castle (a REIT, where this field feeds
+    // approximate FFO) is the same shape.
+    const value = dnaFor(
+      companyFacts({ ...OCF, DepreciationAmortizationAndAccretionNet: [durationFact("2025-12-31", 863_000_000)] }),
+    );
+
+    expect(value).toBe(863_000_000);
+  });
+
+  it("falls back to Depreciation only as the last resort (the AvalonBay/Equity Residential case)", () => {
+    // Both REITs report neither of the first three tags, only bare depreciation — and both are
+    // apartment owners with no material intangible amortization to be missing from it.
+    const value = dnaFor(companyFacts({ ...OCF, Depreciation: [durationFact("2025-12-31", 1_010_400_000)] }));
+
+    expect(value).toBe(1_010_400_000);
+  });
+
+  it("never lets Depreciation override a reported total (the GE case)", () => {
+    // GE has tagged DepreciationDepletionAndAmortization, DepreciationAmortizationAndAccretionNet
+    // and bare Depreciation across its history at materially different values for the same kind of
+    // period — Depreciation must stay last, not merely present.
+    const value = dnaFor(
+      companyFacts({
+        ...OCF,
+        DepreciationDepletionAndAmortization: [durationFact("2025-12-31", 4_636_000_000)],
+        DepreciationAmortizationAndAccretionNet: [durationFact("2025-12-31", 2_128_000_000)],
+        Depreciation: [durationFact("2025-12-31", 9_999_000_000)],
+      }),
+    );
+
+    expect(value).toBe(4_636_000_000);
+  });
+
+  it("prefers DepreciationAmortizationAndAccretionNet over bare Depreciation when both are present and nothing broader is", () => {
+    const value = dnaFor(
+      companyFacts({
+        ...OCF,
+        DepreciationAmortizationAndAccretionNet: [durationFact("2025-12-31", 2_128_000_000)],
+        Depreciation: [durationFact("2025-12-31", 4_636_000_000)],
+      }),
+    );
+
+    expect(value).toBe(2_128_000_000);
   });
 });

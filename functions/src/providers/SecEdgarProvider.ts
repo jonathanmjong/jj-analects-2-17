@@ -623,22 +623,43 @@ export function parseAnnualFundamentalsHistory(
 /**
  * Depreciation & amortization, in tag-precedence order.
  *
- * Filers genuinely split across these two tags with no way to predict which one a given company
- * uses: SPG (CIK 0001063761) reports only `DepreciationAndAmortization` (no
- * `DepreciationDepletionAndAmortization` concept at all), while Vornado (CIK 0000899689) reports
- * BOTH in the same filing, at slightly different values (FY2025: 481,456,000 vs 462,201,000).
- * Order therefore matters, and `DepreciationDepletionAndAmortization` is first because it is the
- * broader concept — it is the total charge as presented in the cash flow statement, whereas a
- * filer reporting both typically uses the narrower `DepreciationAndAmortization` for a component
- * of it. Taking the broader tag keeps the add-back consistent with what the cash flow statement
- * actually reconciles.
+ * Filers genuinely split across these tags with no way to predict which one a given company
+ * uses. Verified live on EDGAR (2026-10):
+ * 1. `DepreciationDepletionAndAmortization` — the broadest concept, and the total charge as
+ *    presented in the cash flow statement for most filers. Must never be displaced.
+ * 2. `DepreciationAndAmortization` — SPG (CIK 0001063761) reports only this (no
+ *    `DepreciationDepletionAndAmortization` concept at all). Where a filer reports BOTH, it is
+ *    typically the narrower component: Vornado (CIK 0000899689) reports both in the same filing
+ *    at slightly different values (FY2025: 481,456,000 vs 462,201,000), so order matters here too.
+ * 3. `DepreciationAmortizationAndAccretionNet` — adds non-cash accretion (e.g. asset-retirement
+ *    obligations) to D&A. Ranked below tag 2 because it is a DIFFERENT, broader basis rather than
+ *    a synonym, but it is the ONLY tag three large filers with otherwise-correct data have ever
+ *    used for this line: JPM, Citigroup and American Express report no tag 1 or 2 at all, and
+ *    neither does Crown Castle (CCI, a REIT, where this field feeds approximate FFO). Recovers
+ *    those with no other candidate rather than leaving them null.
+ * 4. `Depreciation` — depreciation ONLY, no amortization line. Last resort because it is
+ *    narrower than tags 1-2 whenever those exist alongside it (GE reports all of
+ *    tags 1/3/4 across its history at visibly different values). Earns its place for AvalonBay
+ *    and Equity Residential (CIK 0000915912, 0000906107): both REITs, both report tags 1-3 as a
+ *    flat 404, and both are apartment owners with no material intangible amortization to be
+ *    missing — EQR's own `AmortizationOfIntangibleAssets` ran $3-4M against ~$800-900M of
+ *    `Depreciation` in the years it still tagged the concept (through FY2018, then stopped), well
+ *    under rounding. Approximate FFO for those two REITs would otherwise be plain net income.
  *
  * annualFactsByEnd merges across tags and dedups per period end on `filed` date, so within a
  * single filing (one `filed` date for every tag) this array's order decides the winner; a later
- * restatement of either tag still wins over an earlier filing, which is the intended behavior
- * everywhere else in this file.
+ * restatement of any tag still wins over an earlier filing, which is the intended behavior
+ * everywhere else in this file. No filer sampled reports BOTH of the two fallback tags (3 and 4)
+ * while lacking tags 1-2, so their relative order has no observed case to break a tie on; they are
+ * ordered broader-first (accretion-inclusive before depreciation-only) on the same principle as
+ * the rest of this list.
  */
-export const DEPRECIATION_AND_AMORTIZATION_TAGS = ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization"];
+export const DEPRECIATION_AND_AMORTIZATION_TAGS = [
+  "DepreciationDepletionAndAmortization",
+  "DepreciationAndAmortization",
+  "DepreciationAmortizationAndAccretionNet",
+  "Depreciation",
+];
 
 /**
  * Share-based compensation, in STRICT per-period precedence order (annualSeriesWithFallback, not
