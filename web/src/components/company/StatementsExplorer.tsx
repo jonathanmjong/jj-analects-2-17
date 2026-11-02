@@ -11,6 +11,7 @@ import {
   computeYoyChange,
   fiscalYearLabel,
   formatStatementValue,
+  isAccretionInclusive,
   isNciInclusive,
   rowTrend,
   sparklinePoints,
@@ -119,6 +120,7 @@ export function StatementsExplorer({
   const groups = useMemo(() => groupStatementRows(rows), [rows]);
   const filingInfo = useMemo(() => latestFilingInfo(periods), [periods]);
   const hasNciInclusiveCell = rows.some((row) => row.cells.some(isNciInclusive));
+  const hasAccretionInclusiveCell = rows.some((row) => row.cells.some(isAccretionInclusive));
 
   /**
    * Subtotals carry their components behind a disclosure rather than every line
@@ -218,6 +220,14 @@ export function StatementsExplorer({
                 *
               </span>
             )}
+            {isAccretionInclusive(cell) && (
+              <span
+                title="Includes non-cash accretion (e.g. asset-retirement obligations), reported under the DepreciationAmortizationAndAccretionNet tag rather than a pure D&A concept."
+                className="ml-0.5 text-muted-foreground"
+              >
+                †
+              </span>
+            )}
           </td>
         ))}
       </tr>
@@ -300,6 +310,7 @@ export function StatementsExplorer({
       <p className="mt-3 text-xs text-muted-foreground">
         Annual 10-K data via SEC EDGAR · derived fields may differ from as-reported filings
         {hasNciInclusiveCell && <> · * includes noncontrolling interests</>}
+        {hasAccretionInclusiveCell && <> · † includes non-cash accretion</>}
         {filingInfo && (
           <>
             {" · "}

@@ -303,17 +303,16 @@ const BROADER_THAN_LONG_TERM_DEBT_TAGS = new Set([
 ]);
 
 /**
- * The tag that supplied each derived fiscal year's value from annualSeriesWithFallback — same
- * fiscal-year assignment and trimming rules as seriesByFiscalYear, so a year's tag always matches
- * the very fact whose number landed on that year's statement row.
+ * The tag that supplied each derived fiscal year's value, from an already-resolved
+ * annualFactsByEndWithFallback() result — same fiscal-year assignment and trimming rules as
+ * seriesByFiscalYear, so a year's tag always matches the very fact whose number landed on that
+ * year's statement row. Takes the resolved rows rather than re-resolving from `facts` so a caller
+ * that also needs the values (seriesByFiscalYear(resolved.map(r => r.fact), periods)) does the
+ * annualFactsByEndWithFallback walk once, not twice.
  */
-function tagsByFiscalYear(
-  facts: CompanyFacts | null,
-  orderedTags: string[],
-  periods: number,
-): Map<number, string> {
+function tagsByFiscalYear(resolved: { fact: XbrlFact; tag: string }[], periods: number): Map<number, string> {
   const out = new Map<number, string>();
-  for (const { fact, tag } of annualFactsByEndWithFallback(facts, orderedTags)) {
+  for (const { fact, tag } of resolved) {
     out.set(new Date(fact.end).getUTCFullYear(), tag);
   }
   return new Map([...out.entries()].sort((a, b) => b[0] - a[0]).slice(0, periods));
@@ -646,13 +645,17 @@ export function parseAnnualFundamentalsHistory(
  *    `Depreciation` in the years it still tagged the concept (through FY2018, then stopped), well
  *    under rounding. Approximate FFO for those two REITs would otherwise be plain net income.
  *
- * annualFactsByEnd merges across tags and dedups per period end on `filed` date, so within a
- * single filing (one `filed` date for every tag) this array's order decides the winner; a later
- * restatement of any tag still wins over an earlier filing, which is the intended behavior
- * everywhere else in this file. No filer sampled reports BOTH of the two fallback tags (3 and 4)
- * while lacking tags 1-2, so their relative order has no observed case to break a tie on; they are
- * ordered broader-first (accretion-inclusive before depreciation-only) on the same principle as
- * the rest of this list.
+ * Resolved via STRICT per-period precedence (annualSeriesWithFallback), not a plain annualSeries
+ * merge, now that tags 3 and 4 are genuinely different bases rather than near-synonyms of 1-2 —
+ * exactly the failure mode documented on annualFactsByEndWithFallback and on
+ * SHARE_BASED_COMPENSATION_TAGS below. A plain merge dedups per period end on `filed` date alone,
+ * so a filer that later retags an OLDER period's comparative column under a lower-precedence tag
+ * (GE's history of using all four concepts makes this a real, not hypothetical, risk for this
+ * field) would have that later-filed, narrower fact silently override an already-correct broader
+ * one — corrupting the exact REIT FFO figure tags 3-4 exist to recover. No filer sampled reports
+ * BOTH of the two fallback tags (3 and 4) while lacking tags 1-2, so their relative order has no
+ * observed case to break a tie on; they are ordered broader-first (accretion-inclusive before
+ * depreciation-only) on the same principle as the rest of this list.
  */
 export const DEPRECIATION_AND_AMORTIZATION_TAGS = [
   "DepreciationDepletionAndAmortization",
@@ -715,7 +718,9 @@ export function parseAnnualCashFlowStatements(
   const dividends = annualSeries(facts, dividendTags, periods);
   const buybacks = annualSeries(facts, buybackTags, periods);
   const issuance = annualSeries(facts, issuanceTags, periods);
-  const depreciation = annualSeries(facts, DEPRECIATION_AND_AMORTIZATION_TAGS, periods);
+  const depreciationResolved = annualFactsByEndWithFallback(facts, DEPRECIATION_AND_AMORTIZATION_TAGS);
+  const depreciation = seriesByFiscalYear(depreciationResolved.map((r) => r.fact), periods);
+  const depreciationSourceTag = tagsByFiscalYear(depreciationResolved, periods);
   const shareBasedComp = annualSeriesWithFallback(facts, SHARE_BASED_COMPENSATION_TAGS, periods);
 
   const filedAt = latestFiledByFiscalYear([
@@ -724,7 +729,7 @@ export function parseAnnualCashFlowStatements(
     annualFiledDates(facts, dividendTags),
     annualFiledDates(facts, buybackTags),
     annualFiledDates(facts, issuanceTags),
-    annualFiledDates(facts, DEPRECIATION_AND_AMORTIZATION_TAGS),
+    annualFiledDatesWithFallback(facts, DEPRECIATION_AND_AMORTIZATION_TAGS),
     annualFiledDatesWithFallback(facts, SHARE_BASED_COMPENSATION_TAGS),
   ]);
 
@@ -748,6 +753,7 @@ export function parseAnnualCashFlowStatements(
       stockIssuance: issuance.get(fy) ?? null,
       netDebtIssuance: null,
       depreciationAndAmortization: depreciation.get(fy) ?? null,
+      depreciationAndAmortizationSourceTag: depreciationSourceTag.get(fy) ?? null,
       shareBasedCompensation: shareBasedComp.get(fy) ?? null,
     };
   });
@@ -876,8 +882,9 @@ export class SecEdgarProvider extends FinancialDataProvider {
     const interestExpense = annualSeries(facts, interestExpenseTags, periods);
     const pretax = annualSeries(facts, pretaxTags, periods);
     const tax = annualSeries(facts, taxTags, periods);
-    const netIncome = annualSeriesWithFallback(facts, NET_INCOME_TAGS, periods);
-    const netIncomeSourceTag = tagsByFiscalYear(facts, NET_INCOME_TAGS, periods);
+    const netIncomeResolved = annualFactsByEndWithFallback(facts, NET_INCOME_TAGS);
+    const netIncome = seriesByFiscalYear(netIncomeResolved.map((r) => r.fact), periods);
+    const netIncomeSourceTag = tagsByFiscalYear(netIncomeResolved, periods);
     const epsDiluted = annualSeries(facts, epsDilutedTags, periods);
     const dilutedShares = annualSeries(facts, dilutedSharesTags, periods);
 

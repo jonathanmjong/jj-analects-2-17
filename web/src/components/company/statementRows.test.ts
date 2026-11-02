@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BALANCE_ROWS, buildStatementRows, CASH_FLOW_ROWS, computeYoyChange, fiscalYearLabel, formatStatementValue, INCOME_ROWS, isNciInclusive, rowTrend, sparklinePoints, statementYears, type StatementPeriod, groupStatementRows, type StatementRow, latestFilingInfo } from "./statementRows";
+import { BALANCE_ROWS, buildStatementRows, CASH_FLOW_ROWS, computeYoyChange, fiscalYearLabel, formatStatementValue, INCOME_ROWS, isAccretionInclusive, isNciInclusive, rowTrend, sparklinePoints, statementYears, type StatementPeriod, groupStatementRows, type StatementRow, latestFilingInfo } from "./statementRows";
 
 function incomePeriod(fiscalYear: number, fields: Record<string, number | null>): StatementPeriod {
   return { fiscalYear, ...fields } as StatementPeriod;
@@ -74,6 +74,31 @@ describe("net income source tag", () => {
     ).find((r) => r.key === "revenue");
 
     expect(revenue?.cells.every((c) => c.sourceTag === undefined)).toBe(true);
+  });
+});
+
+describe("depreciation & amortization source tag", () => {
+  const daCells = (depreciationAndAmortizationSourceTag: string | null) =>
+    buildStatementRows(
+      [{ fiscalYear: 2025, depreciationAndAmortization: 1, depreciationAndAmortizationSourceTag } as StatementPeriod],
+      CASH_FLOW_ROWS,
+    ).find((r) => r.key === "depreciationAndAmortization")?.cells ?? [];
+
+  it("flags only the accretion-inclusive basis", () => {
+    // Mirrors isNciInclusive: DepreciationAmortizationAndAccretionNet folds in a non-D&A concept
+    // (accretion), the other fallback (bare Depreciation) doesn't and isn't flagged.
+    expect(daCells("DepreciationAmortizationAndAccretionNet").every((c) => isAccretionInclusive(c))).toBe(true);
+    expect(daCells("Depreciation").some((c) => isAccretionInclusive(c))).toBe(false);
+    expect(daCells("DepreciationDepletionAndAmortization").some((c) => isAccretionInclusive(c))).toBe(false);
+  });
+
+  it("flags nothing for a statement written before the field existed", () => {
+    const cells = buildStatementRows(
+      [{ fiscalYear: 2025, depreciationAndAmortization: 1 } as StatementPeriod],
+      CASH_FLOW_ROWS,
+    ).find((r) => r.key === "depreciationAndAmortization")?.cells ?? [];
+
+    expect(cells.some((c) => isAccretionInclusive(c))).toBe(false);
   });
 });
 

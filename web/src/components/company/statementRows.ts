@@ -41,6 +41,16 @@ export function isNciInclusive(cell: StatementCell): boolean {
   return cell.sourceTag === NCI_INCLUSIVE_SOURCE_TAG;
 }
 
+/** The one DEPRECIATION_AND_AMORTIZATION_TAGS entry (SecEdgarProvider.ts) that folds in a
+ * non-D&A concept — non-cash accretion (e.g. asset-retirement obligations). The other fallback
+ * tag, bare `Depreciation`, is a different but not misleading basis for the filers it actually
+ * covers (verified: immaterial amortization) and isn't flagged, same reasoning as above. */
+const ACCRETION_INCLUSIVE_SOURCE_TAG = "DepreciationAmortizationAndAccretionNet";
+
+export function isAccretionInclusive(cell: StatementCell): boolean {
+  return cell.sourceTag === ACCRETION_INCLUSIVE_SOURCE_TAG;
+}
+
 /** Only the shape these helpers actually need; the three statement interfaces all satisfy it. */
 export interface StatementPeriod {
   fiscalYear: number;
@@ -90,7 +100,13 @@ export const BALANCE_ROWS: RowConfig[] = [
 
 export const CASH_FLOW_ROWS: RowConfig[] = [
   { key: "operatingCashFlow", label: "Operating Cash Flow", indent: 0, unit: "currency" },
-  { key: "depreciationAndAmortization", label: "Depreciation & Amortization", indent: 1, unit: "currency" },
+  {
+    key: "depreciationAndAmortization",
+    label: "Depreciation & Amortization",
+    indent: 1,
+    unit: "currency",
+    sourceTagField: "depreciationAndAmortizationSourceTag",
+  },
   { key: "shareBasedCompensation", label: "Share-Based Compensation", indent: 1, unit: "currency" },
   { key: "capitalExpenditures", label: "Capital Expenditures", indent: 1, unit: "currency" },
   { key: "freeCashFlow", label: "Free Cash Flow", indent: 0, unit: "currency" },

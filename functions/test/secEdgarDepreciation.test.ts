@@ -6,8 +6,9 @@ import { DEPRECIATION_AND_AMORTIZATION_TAGS, parseAnnualCashFlowStatements } fro
  * D&A is the add-back that turns net income into (approximate) FFO, and filers do not agree on
  * which XBRL tag carries it — verified live against EDGAR, see DEPRECIATION_AND_AMORTIZATION_TAGS
  * for the full evidence (SPG/Vornado for the original two tags; JPM/Citigroup/AmEx/Crown Castle
- * and AvalonBay/Equity Residential for the two fallback tags added 2026-10). So the merge has to
- * cover all four tags AND have a deterministic winner whenever more than one is present.
+ * and AvalonBay/Equity Residential for the two fallback tags added 2026-10). So the resolution has
+ * to cover all four tags, by STRICT per-period precedence, AND have a deterministic winner
+ * whenever more than one is present.
  */
 
 const FILED = "2026-02-20";
@@ -29,6 +30,8 @@ function companyFacts(tags: Record<string, XbrlFact[]>): CompanyFacts {
 const OCF = { NetCashProvidedByUsedInOperatingActivities: [durationFact("2025-12-31", 2_000_000_000)] };
 
 const dnaFor = (facts: CompanyFacts) => parseAnnualCashFlowStatements(facts, 5, "sec_edgar")[0].depreciationAndAmortization;
+const dnaTagFor = (facts: CompanyFacts) =>
+  parseAnnualCashFlowStatements(facts, 5, "sec_edgar")[0].depreciationAndAmortizationSourceTag;
 
 describe("SEC EDGAR — depreciation & amortization tag precedence", () => {
   it("prefers DepreciationDepletionAndAmortization when a filer reports both (the Vornado case)", () => {
@@ -108,9 +111,11 @@ describe("SEC EDGAR — depreciation & amortization tag precedence", () => {
     expect(value).toBe(1_426_423_000);
   });
 
-  it("lets a later-filed restatement of either tag win over an earlier filing", () => {
-    // The freshest-filing rule is annualFactsByEnd's existing behavior and applies across the
-    // merged tag set — tag order only decides ties within one filing date.
+  it("does not let a later-filed fallback restatement displace the primary for that period", () => {
+    // Strict per-period precedence (annualSeriesWithFallback), not a plain cross-tag merge: within
+    // ONE tag, later-filed wins (unchanged), but ACROSS tags it must not, or a filer that later
+    // retags an older period under a narrower concept would silently corrupt an already-correct
+    // broader figure — the GE-shaped risk DEPRECIATION_AND_AMORTIZATION_TAGS documents.
     const value = dnaFor(
       companyFacts({
         ...OCF,
@@ -119,7 +124,21 @@ describe("SEC EDGAR — depreciation & amortization tag precedence", () => {
       }),
     );
 
-    expect(value).toBe(470_000_000);
+    expect(value).toBe(481_456_000);
+  });
+
+  it("still lets a later-filed restatement of the primary tag itself win", () => {
+    const value = dnaFor(
+      companyFacts({
+        ...OCF,
+        DepreciationDepletionAndAmortization: [
+          durationFact("2025-12-31", 481_456_000, "2026-02-20"),
+          durationFact("2025-12-31", 490_000_000, "2026-08-01"),
+        ],
+      }),
+    );
+
+    expect(value).toBe(490_000_000);
   });
 
   it("leaves the rest of the cash flow statement unchanged", () => {
@@ -200,5 +219,36 @@ describe("SEC EDGAR — depreciation & amortization tag precedence", () => {
     );
 
     expect(value).toBe(2_128_000_000);
+  });
+});
+
+describe("SEC EDGAR — depreciation & amortization source tag", () => {
+  it("records which tag supplied the value, per year (the AvalonBay/Crown Castle case)", () => {
+    const tag = dnaTagFor(companyFacts({ ...OCF, Depreciation: [durationFact("2025-12-31", 1_010_400_000)] }));
+    expect(tag).toBe("Depreciation");
+  });
+
+  it("records DepreciationAmortizationAndAccretionNet when that's the tag that won (the Crown Castle case)", () => {
+    const tag = dnaTagFor(
+      companyFacts({ ...OCF, DepreciationAmortizationAndAccretionNet: [durationFact("2025-12-31", 863_000_000)] }),
+    );
+    expect(tag).toBe("DepreciationAmortizationAndAccretionNet");
+  });
+
+  it("stays null alongside a null value, never standing alone", () => {
+    expect(dnaTagFor(companyFacts(OCF))).toBeNull();
+    expect(dnaFor(companyFacts(OCF))).toBeNull();
+  });
+
+  it("matches the tag that won the GE-shaped conflict, not merely a present tag", () => {
+    const tag = dnaTagFor(
+      companyFacts({
+        ...OCF,
+        DepreciationDepletionAndAmortization: [durationFact("2025-12-31", 4_636_000_000)],
+        DepreciationAmortizationAndAccretionNet: [durationFact("2025-12-31", 2_128_000_000)],
+        Depreciation: [durationFact("2025-12-31", 9_999_000_000)],
+      }),
+    );
+    expect(tag).toBe("DepreciationDepletionAndAmortization");
   });
 });

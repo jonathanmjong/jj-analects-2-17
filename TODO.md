@@ -93,6 +93,14 @@ Running list of known open items. Not a full backlog — just things worth not f
   ~$800-900M of `Depreciation` — well under rounding), and that GE — which has tagged all four
   candidate concepts across its history at materially different values — still resolves to the
   broadest one it reports. Not yet re-measured against production.
+  **Follow-up fix, same day:** a code review caught that the resolution still used the plain
+  cross-tag merge (`annualSeries`), unsafe now that tags 3-4 are genuinely different bases rather
+  than near-synonyms of tags 1-2 — a filer retagging an older period under a lower-precedence tag
+  in a later filing could have silently overwritten an already-correct broader figure. Switched to
+  the strict per-period precedence helper (`annualSeriesWithFallback`) every other multi-basis
+  field in this file already uses. Also added `depreciationAndAmortizationSourceTag` (mirroring
+  `netIncomeSourceTag`) so the statements table can flag `DepreciationAmortizationAndAccretionNet`-
+  sourced cells, the one fallback that includes non-cash accretion.
 - **Net income basis is now recorded per year, not just logged (2026-10-07).**
   `IncomeStatement.netIncomeSourceTag` carries which of `NET_INCOME_TAGS` supplied that fiscal
   year's figure, resolved by the same per-period precedence the value itself goes through — so a

@@ -131,6 +131,17 @@ export interface CashFlowStatement extends StatementPeriodMeta {
    */
   depreciationAndAmortization?: number | null;
   /**
+   * The XBRL tag `depreciationAndAmortization` was resolved from — one of
+   * DEPRECIATION_AND_AMORTIZATION_TAGS in SecEdgarProvider.ts. `DepreciationAmortizationAndAccretionNet`
+   * is the one worth flagging in the UI: it folds in non-cash accretion (e.g. asset-retirement
+   * obligations), which isn't D&A. The other fallback, bare `Depreciation`, is a different but not
+   * misleading basis for the filers it actually covers (verified: immaterial amortization) and
+   * isn't flagged, same reasoning as `netIncomeSourceTag` not flagging its own non-NCI fallback.
+   *
+   * Optional for the same reason every field added after this one's cash-flow siblings is.
+   */
+  depreciationAndAmortizationSourceTag?: string | null;
+  /**
    * Share-based compensation, as reported on the cash flow statement (it is a non-cash add-back
    * to operating cash flow, which is where filers present it). Optional for exactly the reason
    * `depreciationAndAmortization` is — statements written before this field existed (2026-08)

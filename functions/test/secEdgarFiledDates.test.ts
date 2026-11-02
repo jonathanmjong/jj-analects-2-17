@@ -436,6 +436,7 @@ const FROZEN_CASH_FLOW: Omit<CashFlowStatement, "filedAt">[] = [
       stockIssuance: null,
       netDebtIssuance: null,
       depreciationAndAmortization: null,
+      depreciationAndAmortizationSourceTag: null,
       shareBasedCompensation: 11_000_000_000,
   },
   {
@@ -452,6 +453,7 @@ const FROZEN_CASH_FLOW: Omit<CashFlowStatement, "filedAt">[] = [
       stockIssuance: null,
       netDebtIssuance: null,
       depreciationAndAmortization: null,
+      depreciationAndAmortizationSourceTag: null,
       shareBasedCompensation: null,
   },
 ];
