@@ -43,7 +43,9 @@ Running list of known open items. Not a full backlog — just things worth not f
 - **Price history is absent for ~99% of the universe, and free options are exhausted.**
   Measured 2026-08-22: of 200 companies sampled, 199 had no `priceHistory` document at all (the
   4-hourly ingestion job has been 429ing on every ticker for months, essentially never
-  succeeding). `marketData` is NOT a substitute — it holds sparse live-quote snapshots (~24
+  succeeding — re-confirmed 2026-11-04 via `dataRefreshLogs`: zero successes across a full day of
+  invocations, so both price jobs' schedules were cut, see Done below, as a cost reduction with no
+  functional loss). `marketData` is NOT a substitute — it holds sparse live-quote snapshots (~24
   points across 17 months for AAPL), not a daily series, since it only records days a quote
   actually got through. Consequences, all understood rather than assumed: the company page's
   price chart is empty for nearly every company (its empty state says why, not "not available
@@ -77,6 +79,17 @@ Running list of known open items. Not a full backlog — just things worth not f
 
 ## Done (kept for context, remove once stale)
 
+- **Cut the two 429-everything price jobs' schedules for cost, not just left them running
+  (2026-11-04).** Asked to reduce GCP costs, queried `dataRefreshLogs` directly rather than
+  guessing: `priceHistoryRefresh` (every 4 hours) had **zero successes** across every sampled
+  invocation for a full day; `dailyPriceRefresh` (every 5 minutes) succeeded on only ~0-2 of
+  every ~400 tickers per run. Both still paid for a full `collections.companies().get()`
+  (~1,350 Firestore reads) on *every* invocation regardless of outcome — at 5-minute cadence
+  that alone was ~389K reads/day for a trickle of quotes `latest.momentum` doesn't even score
+  (0% category weight). Cut `dailyPriceRefresh` to hourly (12x fewer reads/invocations, no loss
+  of eventual coverage since Yahoo's rate limit — not our request rate — gates success) and
+  `priceHistoryRefresh` to daily (6x fewer, kept rather than removed as a cheap ongoing check for
+  whether Yahoo's block ever lifts). No functional change: nothing scores on either job's output.
 - **D&A tag precedence extended to two more fallback tags (2026-10-16), targeting the REIT gap
   specifically.** `depreciationAndAmortization` only feeds one thing, approximate FFO
   (`ffo_yield` / `price_to_ffo`), and those are sector-restricted to Real Estate — so a Financials

@@ -38,13 +38,24 @@ async function claimLock(): Promise<RefreshState | null> {
 /**
  * Refreshes each company's ~1-year price history (and the momentum figures
  * derived from it) in checkpointed batches, cycling continuously like
- * dailyPriceRefresh — but much less often than that job's 5-minute cadence,
+ * dailyPriceRefresh — but much less often than that job's cadence,
  * since momentum is a slower-moving signal and a full history fetch is
  * heavier per ticker than a quote lookup (see BATCH_SIZE's comment for why
  * this got slower still on 2026-08-04).
+ *
+ * Cut from every 4 hours to daily on 2026-11-04: measured against production
+ * dataRefreshLogs across a full day, every single invocation failed
+ * (tickersSucceeded: 0) — Yahoo's chart endpoint is still 429ing everything
+ * (see TODO.md's price-history section; every free alternative has been
+ * tried and closed off, and the feature that actually shipped instead,
+ * EDGAR's own-history valuation, doesn't depend on this job at all). Kept
+ * running daily rather than removed outright, as a cheap, low-stakes check
+ * for whether Yahoo's block ever lifts — 4-hourly was paying full
+ * `collections.companies().get()` (~1,350 reads) six times a day for a
+ * guaranteed zero; daily cuts that 6x for the same guaranteed zero.
  */
 export const priceHistoryRefresh = onSchedule(
-  { schedule: "every 4 hours", timeoutSeconds: 540, memory: "512MiB" },
+  { schedule: "every 24 hours", timeoutSeconds: 540, memory: "512MiB" },
   async () => {
     const startedAt = new Date().toISOString();
     const state = await claimLock();

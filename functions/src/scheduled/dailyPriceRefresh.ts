@@ -42,9 +42,20 @@ async function claimLock(): Promise<RefreshState | null> {
  * continuously-refreshing cycle (a company gets a new quote roughly once
  * per full lap) rather than a strict once-daily job — a reasonable
  * trade-off given the universe size is data-driven and keeps growing.
+ *
+ * Cut from every 5 minutes to hourly on 2026-11-04: measured against
+ * production dataRefreshLogs, this succeeds on roughly 0-2 of every ~400
+ * tickers per invocation (Yahoo 429ing almost everything — see
+ * priceHistoryRefresh's identical problem), yet every invocation, success
+ * or not, still pays for a full `collections.companies().get()` (~1,350
+ * reads) to rebuild the ticker list. At 288 invocations/day that read alone
+ * was ~389K Firestore reads/day for a trickle of quotes that `latest.momentum`
+ * doesn't even use (0% category weight — see TODO.md). Hourly cuts that cost
+ * ~12x; it doesn't reduce ultimate coverage, since Yahoo's rate limit gates
+ * success, not how often this asks.
  */
 export const dailyPriceRefresh = onSchedule(
-  { schedule: "every 5 minutes", timeoutSeconds: 540, memory: "512MiB" },
+  { schedule: "every 60 minutes", timeoutSeconds: 540, memory: "512MiB" },
   async () => {
     const startedAt = new Date().toISOString();
     const state = await claimLock();
