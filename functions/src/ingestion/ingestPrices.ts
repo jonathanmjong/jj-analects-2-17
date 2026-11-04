@@ -185,20 +185,27 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * reliably but starts silently failing (returns no meta / empty body rather
  * than an HTTP error, so nothing gets logged) under even modest concurrency
  * — a burst of 10 parallel requests dropped ~96% of quotes in production.
- * One request at a time with a real gap between them, plus one retry on a
- * null quote, trades a slower total run for actually getting the data. When
- * Yahoo is unavailable entirely, resolveQuote() falls back to SEC EDGAR.
+ * One request at a time with a real gap between them is kept for that
+ * reason. When Yahoo is unavailable entirely, resolveQuote() falls back to
+ * SEC EDGAR within the same call, so a failed ingestPriceForTicker already
+ * tried both sources once.
+ *
+ * The extra outer retry-on-failure (an 800ms sleep plus a second full
+ * attempt) was removed 2026-11-04: this function is now near-permanently
+ * 429'd by Yahoo (measured via dataRefreshLogs: ~99.5% failure), and an
+ * 800ms-later second attempt at the same persistently-blocking endpoint
+ * essentially never succeeds where the first didn't — it was doubling the
+ * worst-case latency (and therefore billed Cloud Functions time) on nearly
+ * every ticker for no measurable recovery in success rate. If Yahoo's block
+ * is ever transient again, the natural retry is the NEXT scheduled
+ * invocation hitting this ticker on its next lap, not a sub-second retry.
  */
 export async function ingestPricesForUniverse(tickers: string[]) {
   const succeeded: string[] = [];
   const failed: Array<{ ticker: string; error: string }> = [];
 
   for (const ticker of tickers) {
-    let result = await ingestPriceForTicker(ticker);
-    if (!result.ok) {
-      await sleep(800);
-      result = await ingestPriceForTicker(ticker);
-    }
+    const result = await ingestPriceForTicker(ticker);
     if (result.ok) succeeded.push(ticker);
     else failed.push({ ticker, error: result.error ?? "unknown error" });
     await sleep(350);

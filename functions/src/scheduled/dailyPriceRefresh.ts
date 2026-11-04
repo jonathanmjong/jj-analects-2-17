@@ -6,7 +6,19 @@ import { logRefresh } from "../ingestion/ingestFundamentals.js";
 import { PRICE_PROVIDER } from "../providers/index.js";
 import { SEED_UNIVERSE } from "../ingestion/universe.js";
 
-const BATCH_SIZE = 400;
+/**
+ * Cut from 400 to 30 on 2026-11-04, alongside the schedule change below: this loop is sequential
+ * (ingestPricesForUniverse) with a real per-ticker delay (see its own comment on why concurrency
+ * silently drops Yahoo quotes), so duration scales almost linearly with batch size. Measured via
+ * Cloud Monitoring at the old BATCH_SIZE=400 / 5-minute schedule: this function alone burned
+ * ~14.2 HOURS of billed execution time in a single day — by far the largest cost in the whole
+ * project — almost entirely spent in per-ticker retry/pacing sleeps waiting out a Yahoo endpoint
+ * that 429s ~99.5% of requests (see dataRefreshLogs; this app's own request rate doesn't move
+ * that number). Smaller batches plus the hourly schedule combine for a much larger cut than
+ * either alone, with no loss of eventual coverage for the same reason the schedule change has
+ * none: Yahoo's rate limit, not this app's request frequency, gates how much ever gets through.
+ */
+const BATCH_SIZE = 30;
 /** How long a claimed lock is honored before being considered abandoned (crashed invocation). */
 const LOCK_DURATION_MS = 8 * 60 * 1000;
 

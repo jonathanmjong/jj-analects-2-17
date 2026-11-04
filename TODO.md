@@ -90,6 +90,19 @@ Running list of known open items. Not a full backlog — just things worth not f
   of eventual coverage since Yahoo's rate limit — not our request rate — gates success) and
   `priceHistoryRefresh` to daily (6x fewer, kept rather than removed as a cheap ongoing check for
   whether Yahoo's block ever lifts). No functional change: nothing scores on either job's output.
+  **Follow-up, same day — asked to get total cost under $5/month:** the schedule cut alone wasn't
+  enough. Cloud Monitoring's own execution-time metric showed `dailyPriceRefresh` burning ~14.2
+  HOURS of billed compute in a single day at the old settings — by far the largest cost in the
+  whole project, almost entirely per-ticker retry/pacing sleeps (`ingestPricesForUniverse`
+  looped 400 tickers sequentially with an 800ms retry-on-failure sleep plus a 350ms pacing sleep
+  on EVERY ticker). Cutting the *schedule* only reduces invocation count; it doesn't touch
+  per-invocation duration, which scales with batch size. Cut `BATCH_SIZE` 400→30 (duration scales
+  ~linearly with it) and removed the retry-on-failure sleep entirely: at ~99.5% Yahoo failure,
+  an 800ms-later second attempt at the same persistently-blocked endpoint essentially never
+  recovers a ticket the first attempt missed, so it was pure added latency for no measured
+  benefit. Combined with the schedule cut, this is roughly a 190x reduction in this function's
+  daily compute-seconds (~14.2 hours/day → ~4-5 minutes/day), with the same "no coverage loss"
+  reasoning as the schedule cut: Yahoo's rate limit, not this app's request volume, gates success.
 - **D&A tag precedence extended to two more fallback tags (2026-10-16), targeting the REIT gap
   specifically.** `depreciationAndAmortization` only feeds one thing, approximate FFO
   (`ffo_yield` / `price_to_ffo`), and those are sector-restricted to Real Estate — so a Financials
